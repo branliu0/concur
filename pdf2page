@@ -1,0 +1,225 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["pillow", "numpy"]
+# ///
+"""pdf2page - print a PDF 2-up, trimming dead margins so the text stays readable.
+
+Law review articles and SCOTUS briefs/opinions come in two very different page
+formats: "booklet" (small text block centered on letter, ~155pt side margins)
+and "full-page" (~53pt margins).  Naively 2-upping a booklet-format document
+wastes over half the sheet and leaves the text tiny.  By default this measures
+the actual content box and trims to it, which handles both without presets.
+
+  pdf2page brief.pdf                  # auto-measure -> "brief~2up.pdf"
+                                      # (the ~ makes it sort right after the source)
+  pdf2page -p booklet brief.pdf       # force booklet preset
+  pdf2page -p full opinion.pdf        # force full-page preset
+  pdf2page -p none doc.pdf            # plain 2-up, no trimming
+  pdf2page --trim "88 168 88 96" x.pdf  # measure it yourself: L B R T content margins
+
+Only documents with wide reclaimable margins are worth 2-upping.  A booklet-format
+brief (text block ~49% of page width) 2-ups at ~100% of original size; a full-page
+document (~82%) would shrink to ~64%, which is worse than just printing it 1-up.
+So this skips anything falling below --min-scale unless you pass --force.
+  pdf2page -m 18 brief.pdf            # keep 18pt of whitespace around content
+  pdf2page -s 0.96 --gutter 14 x.pdf  # tighter margins, larger text
+
+Measuring renders pages at --dpi (50), which both runs fast on 600dpi scans and
+keeps edge speckle from swallowing the margins.  A scan of a journal page often
+carries a download stamp in the bottom margin; that is real ink, so the measured
+box includes it and the text ends up smaller than it needs to be.  Pass --trim
+with a bottom margin that cuts the stamp to reclaim it.
+"""
+import argparse, re, subprocess, sys, pathlib
+
+PRESETS = {           # L, B, R, T content margins in points
+    "booklet": (155, 145, 155, 118),
+    "full":    (54,  40,  53,  30),
+}
+
+def page_size(path):
+    out = subprocess.run(["pdfinfo", str(path)], capture_output=True, text=True).stdout
+    m = re.search(r"^Page size:\s+([\d.]+) x ([\d.]+)", out, re.M)
+    if not m:
+        sys.exit(f"pdf2page: could not read {path} as a PDF")
+    return float(m.group(1)), float(m.group(2))
+
+def strip_edge_stamps(ink, W, max_w=14.0, min_gap=6.0):
+    """Blank out narrow vertical strips of ink at the left/right page edges.
+
+    Publisher platforms (OUP's "Downloaded from academic.oup.com ...") stamp a
+    line of rotated text down the side of every page.  It is real ink, so the
+    bounding box swallows it and the side margin measures as nearly zero.  A
+    strip at most max_w pt wide, standing apart from the rest of the ink by at
+    least min_gap pt, is taken to be such a stamp.  Only the sides are checked:
+    a narrow band at the top or bottom is usually a running head or page
+    number, which must not be clipped.  Returns (ink, strips removed)."""
+    pw = ink.shape[1]
+    cols = ink.any(axis=0)
+    xs = cols.nonzero()[0]
+    # runs of consecutive inked columns
+    runs = [[xs[0], xs[0]]]
+    for x in xs[1:]:
+        if x == runs[-1][1] + 1:
+            runs[-1][1] = x
+        else:
+            runs.append([x, x])
+    pt = W / pw
+    removed = 0
+    for side in (0, -1):
+        if not runs:
+            break
+        a, b = runs[side]
+        if len(runs) > 1:
+            nb = runs[1] if side == 0 else runs[-2]
+            gap = (nb[0] - b - 1) if side == 0 else (a - nb[1] - 1)
+            stamp = gap * pt >= min_gap
+        else:
+            # an otherwise blank page: a lone strip hugging the edge
+            stamp = (b < pw * 0.1) if side == 0 else (a > pw * 0.9)
+        if (b - a + 1) * pt <= max_w and stamp:
+            ink = ink.copy()
+            ink[:, a:b + 1] = False
+            runs.pop(side)
+            removed += 1
+    return ink, removed
+
+def measure(path, sample, pct=5.0, dpi=50, strip_edges=True):
+    """Content margins from per-page ink extents, in points.
+
+    Renders each page to grayscale at a low dpi and takes the bounding box of
+    everything darker than near-white.  The low dpi is doing real work: a scan
+    carries speckle along the page edges, and at 600dpi a stray dot is ink that
+    a bounding box must enclose - which is why measuring a scan at full
+    resolution reports margins of zero.  Downsampled to ~50dpi with
+    antialiasing, an isolated dot averages away to white while text strokes
+    stay dark, so the box lands on the actual text block.  It is also far
+    faster than rendering the full-resolution bitmap.
+
+    pct trims outliers (default 5th/95th percentile) so one odd page cannot
+    force a huge margin.  pct=0 uses the true min/max, which guarantees nothing
+    is ever clipped - use it when a single page carries extra content such as a
+    stamped header, which a percentile would discard as an outlier."""
+    import tempfile, numpy as np
+    from PIL import Image
+    W, H = page_size(path)
+    with tempfile.TemporaryDirectory() as d:
+        r = subprocess.run(["pdftoppm", "-r", str(dpi), "-gray", "-l", str(sample),
+                            str(path), d + "/p"], capture_output=True, text=True)
+        if r.returncode != 0:
+            return None
+        boxes, stamped, pages = [], 0, 0
+        for f in sorted(pathlib.Path(d).glob("p-*.pgm")):
+            ink = np.array(Image.open(f)) < 200
+            if not ink.any():
+                continue
+            pages += 1
+            if strip_edges:
+                ink, n = strip_edge_stamps(ink, W)
+                stamped += n > 0
+                if not ink.any():
+                    continue
+            ys, xs = np.where(ink)
+            ph, pw = ink.shape
+            # back to points via the page's own pixel dims, not the dpi ratio,
+            # so pdftoppm's rounding cannot shift the box
+            boxes.append((xs.min() / pw * W, ys.min() / ph * H,
+                          (pw - 1 - xs.max()) / pw * W, (ph - 1 - ys.max()) / ph * H))
+    if stamped:
+        print(f"pdf2page: ignored a narrow side stamp on {stamped} of {pages} pages "
+              f"(--keep-edges to count it)", file=sys.stderr)
+    if not boxes:
+        return None
+    def q(vals, p):
+        vals = sorted(vals)
+        return vals[max(0, min(len(vals) - 1, round(p / 100 * (len(vals) - 1))))]
+    # PIL rows run top-down, so index 1 is the top margin and 3 the bottom;
+    # return them as L, B, R, T to match pdfjam's trim order
+    return (q([b[0] for b in boxes], pct), q([b[3] for b in boxes], pct),
+            q([b[2] for b in boxes], pct), q([b[1] for b in boxes], pct))
+
+def main():
+    ap = argparse.ArgumentParser(description="Print a PDF 2-up with margins trimmed.")
+    ap.add_argument("input")
+    ap.add_argument("output", nargs="?")
+    ap.add_argument("-p", "--preset", default="auto", choices=["auto", "booklet", "full", "none"])
+    ap.add_argument("-m", "--margin", type=float, default=10.0,
+                    help="whitespace to retain around content, pt (default 10)")
+    ap.add_argument("-s", "--scale", type=float, default=0.90,
+                    help="shrink to leave a printable border (default 0.90)")
+    ap.add_argument("--paper", default="letterpaper")
+    ap.add_argument("--gutter", type=float, default=36.0, help="gap between the two pages, pt")
+    ap.add_argument("--frame", action="store_true")
+    ap.add_argument("-n", "--dry-run", action="store_true")
+    ap.add_argument("-f", "--force", action="store_true", help="2-up even if text would shrink a lot")
+    ap.add_argument("--min-scale", type=float, default=0.85,
+                    help="skip unless text stays at least this fraction of size (default 0.85)")
+    ap.add_argument("--sample", type=int, default=40, help="pages to measure (default 40)")
+    ap.add_argument("--pct", type=float, default=5.0,
+                    help="outlier trim percentile; 0 = never clip anything (default 5)")
+    ap.add_argument("--dpi", type=int, default=50,
+                    help="resolution to measure at, dpi (default 50)")
+    ap.add_argument("--keep-edges", action="store_true",
+                    help="count narrow strips of ink at the side edges (e.g. an OUP "
+                         "'Downloaded from' stamp) as content instead of ignoring them")
+    ap.add_argument("--trim", metavar='"L B R T"',
+                    help="content margins in pt, overriding the measurement; --margin "
+                         "is still subtracted from each. Use when the measured box is "
+                         "wrong or you want to cut a band the measurement counts as "
+                         "content, such as a JSTOR download stamp under the text.")
+    a = ap.parse_args()
+
+    src = pathlib.Path(a.input)
+    if not src.exists():
+        sys.exit(f"pdf2page: no such file: {src}")
+    out = pathlib.Path(a.output) if a.output else src.with_name(src.stem + "~2up.pdf")
+
+    if a.trim:
+        try:
+            marg = tuple(float(v) for v in a.trim.replace(",", " ").split())
+            if len(marg) != 4:
+                raise ValueError
+        except ValueError:
+            sys.exit('pdf2page: --trim wants four numbers, "L B R T" in points')
+    elif a.preset == "none":
+        marg = None
+    elif a.preset == "auto":
+        marg = measure(src, a.sample, a.pct, a.dpi, not a.keep_edges)
+        if marg is None:
+            print("pdf2page: could not measure content; falling back to no trim", file=sys.stderr)
+    else:
+        marg = PRESETS[a.preset]
+
+    cmd = ["pdfjam", "--quiet", "--paper", a.paper, "--nup", "2x1", "--landscape",
+           "--scale", str(a.scale), "--delta", f"{a.gutter} 0"]
+    if marg:
+        # never trim past the content, and never trim negative
+        t = [max(0.0, v - a.margin) for v in marg]
+        cmd += ["--trim", " ".join(f"{v:.1f}" for v in t), "--clip", "true"]
+        W, H = page_size(src)
+        how = "manual" if a.trim else a.preset
+        print(f"pdf2page: {how} trim  L{t[0]:.0f} B{t[1]:.0f} R{t[2]:.0f} T{t[3]:.0f}"
+              f"   content {W-marg[0]-marg[2]:.0f}x{H-marg[1]-marg[3]:.0f}pt", file=sys.stderr)
+    if marg:
+        # warn when the text would end up too small for 2-up to be worthwhile
+        cw, ch = W - marg[0] - marg[2] + 2*a.margin, H - marg[1] - marg[3] + 2*a.margin
+        est = min((792.0*a.scale - a.gutter)/2/cw, 612.0*a.scale/ch)
+        print(f"pdf2page: text ends at ~{est:.0%} of original size", file=sys.stderr)
+        if est < a.min_scale and not a.force:
+            sys.exit(f"pdf2page: skipping - only {est:.0%} of original size "
+                     f"(margins too small to reclaim; threshold {a.min_scale:.0%}). "
+                     f"Use --force or lower --min-scale to override.")
+
+    if a.frame:
+        cmd += ["--frame", "true"]
+    cmd += ["--outfile", str(out), str(src)]
+
+    if a.dry_run:
+        print(" ".join(cmd)); return
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0 or not out.exists():
+        sys.exit("pdf2page: pdfjam failed\n" + r.stderr[-1500:])
+    print(out)
+
+main()
