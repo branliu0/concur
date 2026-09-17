@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["pillow", "numpy"]
+# dependencies = ["pillow", "numpy", "pypdf>=5"]
 # ///
 """pdf2page - print a PDF 2-up, trimming dead margins so the text stays readable.
 
@@ -18,6 +18,11 @@ the actual content box and trims to it, which handles both without presets.
   pdf2page -p none doc.pdf            # plain 2-up, no trimming
   pdf2page --trim "88 168 88 96" x.pdf  # measure it yourself: L B R T content margins
 
+Odd and even pages are measured and trimmed separately.  Scanned books put the
+text block in a different place on recto and verso pages; one box covering both
+would waste the difference as width.  --trim takes eight numbers to set the two
+separately (odd L B R T, then even L B R T).
+
 Only documents with wide reclaimable margins are worth 2-upping.  A booklet-format
 brief (text block ~49% of page width) 2-ups at ~100% of original size; a full-page
 document (~82%) would shrink to ~64%, which is worse than just printing it 1-up.
@@ -29,21 +34,23 @@ Measuring renders pages at --dpi (50), which both runs fast on 600dpi scans and
 keeps edge speckle from swallowing the margins.  A scan of a journal page often
 carries a download stamp in the bottom margin; that is real ink, so the measured
 box includes it and the text ends up smaller than it needs to be.  Pass --trim
-with a bottom margin that cuts the stamp to reclaim it.
+with a bottom margin that cuts the stamp to reclaim it.  (Stamps running down
+the side of the page, like OUP's, are detected and ignored automatically.)
+
+Needs poppler's pdftoppm on PATH for measuring; the layout itself is pypdf.
 """
-import argparse, re, subprocess, sys, pathlib
+import argparse, subprocess, sys, pathlib
 
 PRESETS = {           # L, B, R, T content margins in points
     "booklet": (155, 145, 155, 118),
     "full":    (54,  40,  53,  30),
 }
 
-def page_size(path):
-    out = subprocess.run(["pdfinfo", str(path)], capture_output=True, text=True).stdout
-    m = re.search(r"^Page size:\s+([\d.]+) x ([\d.]+)", out, re.M)
-    if not m:
-        sys.exit(f"pdf2page: could not read {path} as a PDF")
-    return float(m.group(1)), float(m.group(2))
+PAPER = {             # landscape sheet, w x h in points
+    "letter": (792.0, 612.0),
+    "legal":  (1008.0, 612.0),
+    "a4":     (841.89, 595.28),
+}
 
 def strip_edge_stamps(ink, W, max_w=14.0, min_gap=6.0):
     """Blank out narrow vertical strips of ink at the left/right page edges.
@@ -85,8 +92,11 @@ def strip_edge_stamps(ink, W, max_w=14.0, min_gap=6.0):
             removed += 1
     return ink, removed
 
-def measure(path, sample, pct=5.0, dpi=50, strip_edges=True):
+def measure(path, sizes, sample, pct=5.0, dpi=50, strip_edges=True):
     """Content margins from per-page ink extents, in points.
+
+    Returns {1: odd-page margins, 0: even-page margins}, each as (L, B, R, T),
+    or None when nothing could be measured.  sizes[i] is page i+1's (w, h).
 
     Renders each page to grayscale at a low dpi and takes the bounding box of
     everything darker than near-white.  The low dpi is doing real work: a scan
@@ -103,41 +113,50 @@ def measure(path, sample, pct=5.0, dpi=50, strip_edges=True):
     stamped header, which a percentile would discard as an outlier."""
     import tempfile, numpy as np
     from PIL import Image
-    W, H = page_size(path)
     with tempfile.TemporaryDirectory() as d:
         r = subprocess.run(["pdftoppm", "-r", str(dpi), "-gray", "-l", str(sample),
                             str(path), d + "/p"], capture_output=True, text=True)
         if r.returncode != 0:
             return None
-        boxes, stamped, pages = [], 0, 0
+        boxes, stamped, pages = {0: [], 1: []}, 0, 0
         for f in sorted(pathlib.Path(d).glob("p-*.pgm")):
+            n = int(f.stem.rsplit("-", 1)[1])
+            W, H = sizes[n - 1]
             ink = np.array(Image.open(f)) < 200
             if not ink.any():
                 continue
             pages += 1
             if strip_edges:
-                ink, n = strip_edge_stamps(ink, W)
-                stamped += n > 0
+                ink, k = strip_edge_stamps(ink, W)
+                stamped += k > 0
                 if not ink.any():
                     continue
             ys, xs = np.where(ink)
             ph, pw = ink.shape
             # back to points via the page's own pixel dims, not the dpi ratio,
             # so pdftoppm's rounding cannot shift the box
-            boxes.append((xs.min() / pw * W, ys.min() / ph * H,
-                          (pw - 1 - xs.max()) / pw * W, (ph - 1 - ys.max()) / ph * H))
+            boxes[n % 2].append((xs.min() / pw * W, ys.min() / ph * H,
+                                 (pw - 1 - xs.max()) / pw * W, (ph - 1 - ys.max()) / ph * H))
     if stamped:
         print(f"pdf2page: ignored a narrow side stamp on {stamped} of {pages} pages "
               f"(--keep-edges to count it)", file=sys.stderr)
-    if not boxes:
+    if not boxes[0] and not boxes[1]:
         return None
+    # a parity with nothing measured (a one-page document) borrows the other's box
+    for p in (0, 1):
+        if not boxes[p]:
+            boxes[p] = boxes[1 - p]
     def q(vals, p):
         vals = sorted(vals)
         return vals[max(0, min(len(vals) - 1, round(p / 100 * (len(vals) - 1))))]
     # PIL rows run top-down, so index 1 is the top margin and 3 the bottom;
-    # return them as L, B, R, T to match pdfjam's trim order
-    return (q([b[0] for b in boxes], pct), q([b[3] for b in boxes], pct),
-            q([b[2] for b in boxes], pct), q([b[1] for b in boxes], pct))
+    # return them as L, B, R, T
+    return {p: (q([b[0] for b in bs], pct), q([b[3] for b in bs], pct),
+                q([b[2] for b in bs], pct), q([b[1] for b in bs], pct))
+            for p, bs in boxes.items()}
+
+def fmt(t):
+    return f"L{t[0]:.0f} B{t[1]:.0f} R{t[2]:.0f} T{t[3]:.0f}"
 
 def main():
     ap = argparse.ArgumentParser(description="Print a PDF 2-up with margins trimmed.")
@@ -147,11 +166,13 @@ def main():
     ap.add_argument("-m", "--margin", type=float, default=10.0,
                     help="whitespace to retain around content, pt (default 10)")
     ap.add_argument("-s", "--scale", type=float, default=0.90,
-                    help="shrink to leave a printable border (default 0.90)")
-    ap.add_argument("--paper", default="letterpaper")
+                    help="fraction of the sheet to use, leaving a printable border (default 0.90)")
+    ap.add_argument("--paper", default="letter",
+                    help="letter, legal or a4 (default letter)")
     ap.add_argument("--gutter", type=float, default=36.0, help="gap between the two pages, pt")
-    ap.add_argument("--frame", action="store_true")
-    ap.add_argument("-n", "--dry-run", action="store_true")
+    ap.add_argument("--frame", action="store_true", help="draw a box around each page")
+    ap.add_argument("-n", "--dry-run", action="store_true",
+                    help="measure and report, but write nothing")
     ap.add_argument("-f", "--force", action="store_true", help="2-up even if text would shrink a lot")
     ap.add_argument("--min-scale", type=float, default=0.85,
                     help="skip unless text stays at least this fraction of size (default 0.85)")
@@ -165,61 +186,152 @@ def main():
                          "'Downloaded from' stamp) as content instead of ignoring them")
     ap.add_argument("--trim", metavar='"L B R T"',
                     help="content margins in pt, overriding the measurement; --margin "
-                         "is still subtracted from each. Use when the measured box is "
-                         "wrong or you want to cut a band the measurement counts as "
-                         "content, such as a JSTOR download stamp under the text.")
+                         "is still subtracted from each. Four numbers apply to every "
+                         "page, eight set odd then even pages. Use when the measured "
+                         "box is wrong or you want to cut a band the measurement counts "
+                         "as content, such as a JSTOR download stamp under the text.")
     a = ap.parse_args()
+
+    import logging
+    from pypdf import PdfReader, PdfWriter
+    from pypdf.errors import PyPdfError
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+    # pypdf logs recoverable damage ("Ignoring wrong pointing object") to stderr
+    logging.getLogger("pypdf").setLevel(logging.ERROR)
 
     src = pathlib.Path(a.input)
     if not src.exists():
         sys.exit(f"pdf2page: no such file: {src}")
     out = pathlib.Path(a.output) if a.output else src.with_name(src.stem + "~2up.pdf")
+    paper = a.paper.lower().removesuffix("paper")
+    if paper not in PAPER:
+        sys.exit(f"pdf2page: unknown --paper {a.paper}; choose from {', '.join(PAPER)}")
+    SW, SH = PAPER[paper]
 
+    try:
+        reader = PdfReader(src)
+        if reader.is_encrypted:
+            reader.decrypt("")
+        pages = list(reader.pages)
+        # page sizes as displayed, i.e. after /Rotate - which is how pdftoppm
+        # renders them and so the frame the measured margins are in
+        sizes = [(float(pg.cropbox.width), float(pg.cropbox.height))[::1 if pg.rotation % 180 == 0 else -1]
+                 for pg in pages]
+    except (PyPdfError, OSError, ValueError) as e:
+        sys.exit(f"pdf2page: could not read {src} as a PDF ({e})")
+    if not pages:
+        sys.exit(f"pdf2page: {src} has no pages")
+
+    # content margins per parity: {1: odd pages, 0: even pages}
     if a.trim:
         try:
-            marg = tuple(float(v) for v in a.trim.replace(",", " ").split())
-            if len(marg) != 4:
+            v = tuple(float(x) for x in a.trim.replace(",", " ").split())
+            if len(v) not in (4, 8):
                 raise ValueError
         except ValueError:
-            sys.exit('pdf2page: --trim wants four numbers, "L B R T" in points')
+            sys.exit('pdf2page: --trim wants four numbers "L B R T" in points, '
+                     'or eight (odd pages, then even)')
+        marg = {1: v[:4], 0: v[4:] or v[:4]}
     elif a.preset == "none":
-        marg = None
+        marg = {1: (0, 0, 0, 0), 0: (0, 0, 0, 0)}
     elif a.preset == "auto":
-        marg = measure(src, a.sample, a.pct, a.dpi, not a.keep_edges)
+        marg = measure(src, sizes, a.sample, a.pct, a.dpi, not a.keep_edges)
         if marg is None:
             print("pdf2page: could not measure content; falling back to no trim", file=sys.stderr)
+            marg = {1: (0, 0, 0, 0), 0: (0, 0, 0, 0)}
     else:
-        marg = PRESETS[a.preset]
+        marg = {1: PRESETS[a.preset], 0: PRESETS[a.preset]}
 
-    cmd = ["pdfjam", "--quiet", "--paper", a.paper, "--nup", "2x1", "--landscape",
-           "--scale", str(a.scale), "--delta", f"{a.gutter} 0"]
-    if marg:
-        # never trim past the content, and never trim negative
-        t = [max(0.0, v - a.margin) for v in marg]
-        cmd += ["--trim", " ".join(f"{v:.1f}" for v in t), "--clip", "true"]
-        W, H = page_size(src)
-        how = "manual" if a.trim else a.preset
-        print(f"pdf2page: {how} trim  L{t[0]:.0f} B{t[1]:.0f} R{t[2]:.0f} T{t[3]:.0f}"
-              f"   content {W-marg[0]-marg[2]:.0f}x{H-marg[1]-marg[3]:.0f}pt", file=sys.stderr)
-    if marg:
-        # warn when the text would end up too small for 2-up to be worthwhile
-        cw, ch = W - marg[0] - marg[2] + 2*a.margin, H - marg[1] - marg[3] + 2*a.margin
-        est = min((792.0*a.scale - a.gutter)/2/cw, 612.0*a.scale/ch)
-        print(f"pdf2page: text ends at ~{est:.0%} of original size", file=sys.stderr)
-        if est < a.min_scale and not a.force:
-            sys.exit(f"pdf2page: skipping - only {est:.0%} of original size "
-                     f"(margins too small to reclaim; threshold {a.min_scale:.0%}). "
-                     f"Use --force or lower --min-scale to override.")
+    # never trim past the content, and never trim negative
+    trim = {p: tuple(max(0.0, x - a.margin) for x in m) for p, m in marg.items()}
+    how = "manual" if a.trim else a.preset
+    if trim[1] == trim[0]:
+        print(f"pdf2page: {how} trim  {fmt(trim[1])}", file=sys.stderr)
+    else:
+        print(f"pdf2page: {how} trim  odd {fmt(trim[1])}  even {fmt(trim[0])}", file=sys.stderr)
 
-    if a.frame:
-        cmd += ["--frame", "true"]
-    cmd += ["--outfile", str(out), str(src)]
-
+    # each page's trimmed box goes in a cell half the usable sheet wide; one
+    # scale for the whole document, set by whichever parity fits worse, keeps
+    # the type the same size on every page
+    cell_w, cell_h = (SW * a.scale - a.gutter) / 2, SH * a.scale
+    def box(i):
+        # trimmed box in displayed coordinates, origin at the page's lower left
+        (W, H), t = sizes[i], trim[(i + 1) % 2]
+        x0, y0, x1, y1 = t[0], t[1], W - t[2], H - t[3]
+        if x1 - x0 < 1 or y1 - y0 < 1:
+            sys.exit(f"pdf2page: trim leaves nothing of page {i + 1}")
+        return x0, y0, x1, y1
+    def fit(b):
+        return min(cell_w / (b[2] - b[0]), cell_h / (b[3] - b[1]))
+    scale = min(fit(box(i)) for i in range(min(2, len(pages))))
+    print(f"pdf2page: text ends at ~{scale:.0%} of original size", file=sys.stderr)
+    if scale < a.min_scale and not a.force:
+        sys.exit(f"pdf2page: skipping - only {scale:.0%} of original size "
+                 f"(margins too small to reclaim; threshold {a.min_scale:.0%}). "
+                 f"Use --force or lower --min-scale to override.")
     if a.dry_run:
-        print(" ".join(cmd)); return
-    r = subprocess.run(cmd, capture_output=True, text=True)
-    if r.returncode != 0 or not out.exists():
-        sys.exit("pdf2page: pdfjam failed\n" + r.stderr[-1500:])
+        return
+
+    writer = PdfWriter()
+    left = (SW - 2 * cell_w - a.gutter) / 2
+    bottom = (SH - cell_h) / 2
+    for i in range(0, len(pages), 2):
+        sheet = writer.add_blank_page(SW, SH)
+        ops, xobjects = [], DictionaryObject()
+        for slot, j in enumerate(range(i, min(i + 2, len(pages)))):
+            b = box(j)
+            s = min(scale, fit(b))          # an oversized odd page still has to fit
+            w, h = (b[2] - b[0]) * s, (b[3] - b[1]) * s
+            ox = left + slot * (cell_w + a.gutter) + (cell_w - w) / 2
+            oy = bottom + (cell_h - h) / 2
+            name = f"/P{j + 1}"
+            xobjects[NameObject(name)] = form_xobject(writer, pages[j])
+            # clip to the trimmed box on the sheet, then draw the whole page
+            # scaled so the box lands there
+            ops.append(f"q {ox:.3f} {oy:.3f} {w:.3f} {h:.3f} re W n "
+                       f"{s:.5f} 0 0 {s:.5f} {ox - s * b[0]:.3f} {oy - s * b[1]:.3f} cm "
+                       f"{name} Do Q")
+            if a.frame:
+                ops.append(f"q 0.5 w {ox:.3f} {oy:.3f} {w:.3f} {h:.3f} re S Q")
+        sheet[NameObject("/Resources")] = DictionaryObject({NameObject("/XObject"): xobjects})
+        content = DecodedStreamObject()
+        content.set_data("\n".join(ops).encode())
+        sheet[NameObject("/Contents")] = writer._add_object(content.flate_encode())
+    try:
+        with open(out, "wb") as fh:
+            writer.write(fh)
+    except OSError as e:
+        sys.exit(f"pdf2page: could not write {out} ({e})")
     print(out)
+
+def form_xobject(writer, pg):
+    """The page, untouched, as a Form XObject in displayed orientation.
+
+    Wrapping the page's content stream as-is is what LaTeX's pdfpages does, and
+    unlike pypdf's merge_transformed_page it never parses the content, so a
+    text-heavy page copies over in milliseconds and stays compressed.  /Matrix
+    maps the page's own space to its displayed frame (lower left at 0,0), which
+    folds any /Rotate in without touching the content either."""
+    from pypdf.generic import ArrayObject, DecodedStreamObject, FloatObject, NameObject
+    X0, Y0, X1, Y1 = (float(v) for v in pg.cropbox)
+    matrix = {0:   (1, 0, 0, 1, -X0, -Y0),
+              90:  (0, -1, 1, 0, -Y0, X1),
+              180: (-1, 0, 0, -1, X1, Y1),
+              270: (0, 1, -1, 0, Y1, -X0)}[pg.rotation % 360]
+    contents = pg.get_contents()
+    xo = DecodedStreamObject()
+    xo.set_data(contents.get_data() if contents is not None else b"")
+    xo = xo.flate_encode()
+    xo.update({
+        NameObject("/Type"): NameObject("/XObject"),
+        NameObject("/Subtype"): NameObject("/Form"),
+        NameObject("/BBox"): ArrayObject(FloatObject(v) for v in (X0, Y0, X1, Y1)),
+        NameObject("/Matrix"): ArrayObject(FloatObject(v) for v in matrix),
+    })
+    if "/Resources" in pg:
+        xo[NameObject("/Resources")] = pg["/Resources"].clone(writer)
+    if "/Group" in pg:              # keep transparency groups rendering right
+        xo[NameObject("/Group")] = pg["/Group"].clone(writer)
+    return writer._add_object(xo)
 
 main()
