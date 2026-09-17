@@ -40,6 +40,9 @@ the side of the page, like OUP's, are detected and ignored automatically.)
 Needs poppler's pdftoppm on PATH for measuring; the layout itself is pypdf.
 """
 import argparse, subprocess, sys, pathlib
+import statistics
+
+SIZE_TOL = 8.0        # pt; scans wander a point or two between pages
 
 PRESETS = {           # L, B, R, T content margins in points
     "booklet": (155, 145, 155, 118),
@@ -92,11 +95,12 @@ def strip_edge_stamps(ink, W, max_w=14.0, min_gap=6.0):
             removed += 1
     return ink, removed
 
-def measure(path, sizes, sample, pct=5.0, dpi=50, strip_edges=True):
+def measure(path, sizes, sample, pct=5.0, dpi=50, strip_edges=True, only=None):
     """Content margins from per-page ink extents, in points.
 
     Returns {1: odd-page margins, 0: even-page margins}, each as (L, B, R, T),
-    or None when nothing could be measured.  sizes[i] is page i+1's (w, h).
+    or None when nothing could be measured.  sizes[i] is page i+1's (w, h);
+    only, when given, limits the measurement to those page numbers.
 
     Renders each page to grayscale at a low dpi and takes the bounding box of
     everything darker than near-white.  The low dpi is doing real work: a scan
@@ -121,6 +125,8 @@ def measure(path, sizes, sample, pct=5.0, dpi=50, strip_edges=True):
         boxes, stamped, pages = {0: [], 1: []}, 0, 0
         for f in sorted(pathlib.Path(d).glob("p-*.pgm")):
             n = int(f.stem.rsplit("-", 1)[1])
+            if only is not None and n not in only:
+                continue
             W, H = sizes[n - 1]
             ink = np.array(Image.open(f)) < 200
             if not ink.any():
@@ -222,6 +228,23 @@ def main():
     if not pages:
         sys.exit(f"pdf2page: {src} has no pages")
 
+    # A JSTOR or HeinOnline download leads with a cover page, often a different
+    # size and nearly full of text.  Measured in with the rest it wrecks the
+    # margins, and sized in with the rest it shrinks the whole document to fit
+    # itself, so pages of any less common size are set aside: placed untrimmed,
+    # scaled only if they would overflow, and left out of both calculations.
+    usual = (statistics.median(w for w, h in sizes), statistics.median(h for w, h in sizes))
+    def regular_size(wh):
+        return abs(wh[0] - usual[0]) <= SIZE_TOL and abs(wh[1] - usual[1]) <= SIZE_TOL
+    regular = [i for i, wh in enumerate(sizes) if regular_size(wh)]
+    odd_sized = [i for i, wh in enumerate(sizes) if not regular_size(wh)]
+    if odd_sized:
+        shown = ", ".join(str(i + 1) for i in odd_sized[:4])
+        more = f" and {len(odd_sized) - 4} more" if len(odd_sized) > 4 else ""
+        print(f"pdf2page: page{'s' if len(odd_sized) > 1 else ''} {shown}{more} "
+              f"{'are' if len(odd_sized) > 1 else 'is'} not {usual[0]:.0f}x{usual[1]:.0f}pt "
+              f"(a cover page?); placing untrimmed", file=sys.stderr)
+
     # content margins per parity: {1: odd pages, 0: even pages}
     if a.trim:
         try:
@@ -235,7 +258,8 @@ def main():
     elif a.preset == "none":
         marg = {1: (0, 0, 0, 0), 0: (0, 0, 0, 0)}
     elif a.preset == "auto":
-        marg = measure(src, sizes, a.sample, a.pct, a.dpi, not a.keep_edges)
+        marg = measure(src, sizes, a.sample, a.pct, a.dpi, not a.keep_edges,
+                       only={i + 1 for i in regular})
         if marg is None:
             print("pdf2page: could not measure content; falling back to no trim", file=sys.stderr)
             marg = {1: (0, 0, 0, 0), 0: (0, 0, 0, 0)}
@@ -256,14 +280,16 @@ def main():
     cell_w, cell_h = (SW * a.scale - a.gutter) / 2, SH * a.scale
     def box(i):
         # trimmed box in displayed coordinates, origin at the page's lower left
-        (W, H), t = sizes[i], trim[(i + 1) % 2]
+        (W, H) = sizes[i]
+        t = trim[(i + 1) % 2] if regular_size(sizes[i]) else (0.0, 0.0, 0.0, 0.0)
         x0, y0, x1, y1 = t[0], t[1], W - t[2], H - t[3]
         if x1 - x0 < 1 or y1 - y0 < 1:
             sys.exit(f"pdf2page: trim leaves nothing of page {i + 1}")
         return x0, y0, x1, y1
     def fit(b):
         return min(cell_w / (b[2] - b[0]), cell_h / (b[3] - b[1]))
-    scale = min(fit(box(i)) for i in range(min(2, len(pages))))
+    # one scale for the document, set by the worse-fitting parity of a regular page
+    scale = min(fit(box(i)) for i in regular[:2]) if regular else 1.0
     print(f"pdf2page: text ends at ~{scale:.0%} of original size", file=sys.stderr)
     if scale < a.min_scale and not a.force:
         sys.exit(f"pdf2page: skipping - only {scale:.0%} of original size "

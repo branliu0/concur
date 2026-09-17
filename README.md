@@ -57,10 +57,14 @@ wrapper expects `pdf2page` at `~/bin/pdf2page` and looks for uv in
    standing apart from the text, is treated as a download stamp (OUP's
    "Downloaded from academic.oup.com …") and left out of the box.
    `--keep-edges` turns this off.
-3. **Check it's worth it.** If the text would still end up below 85% of its
+3. **Set aside cover pages.** JSTOR and HeinOnline downloads lead with a
+   cover page, often a different size and nearly full of text. Pages whose size
+   differs from the document's usual one are left out of the measurement,
+   placed untrimmed, and not allowed to set the scale for everything else.
+4. **Check it's worth it.** If the text would still end up below 85% of its
    original size, the file is skipped: 1-up would read better. `--force`
    overrides, `--min-scale` moves the threshold.
-4. **Lay out.** Each page is cropped to its box (plus 10pt of breathing room)
+5. **Lay out.** Each page is cropped to its box (plus 10pt of breathing room)
    and placed on a landscape sheet at one scale for the whole document.
 
 ## Options

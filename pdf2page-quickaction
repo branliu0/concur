@@ -1,13 +1,13 @@
 #!/bin/zsh
 # Finder Quick Action wrapper around pdf2page.
 #
-# Services are launched by launchd with a bare PATH, so uv (~/.local/bin),
-# poppler (/opt/homebrew/bin) and pdfjam (/Library/TeX/texbin) all have to be
-# put back before pdf2page can find them.  Quick Actions also swallow stdout
+# Services are launched by launchd with a bare PATH, so uv (~/.local/bin) and
+# poppler (/opt/homebrew/bin) both have to be put back before pdf2page can
+# find them.  Quick Actions also swallow stdout
 # and stderr, and notifications posted from a service are silently dropped, so
 # every run ends in a dialog: success offers to open the result, a skip offers
 # to make it anyway (--force), and a failure shows pdf2page's own stderr.
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/Library/TeX/texbin:/usr/bin:/bin:/usr/sbin:/sbin"
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 PDF2PAGE="$HOME/bin/pdf2page"
 
