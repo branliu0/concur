@@ -23,6 +23,14 @@ text block in a different place on recto and verso pages; one box covering both
 would waste the difference as width.  --trim takes eight numbers to set the two
 separately (odd L B R T, then even L B R T).
 
+Pages that do not match the rest are handled on their own.  A cover page of a
+different size (JSTOR, HeinOnline) is placed untrimmed, and a page whose text
+block is much wider than the article's - a journal's abstract and contents
+pages - gets a sheet to itself at full size, since sizing the whole document to
+fit it would shrink the article.  Those sheets keep the source's portrait shape,
+so the output mixes orientations; printers handle that, but --oversize 2up
+turns it off.
+
 Only documents with wide reclaimable margins are worth 2-upping.  A booklet-format
 brief (text block ~49% of page width) 2-ups at ~100% of original size; a full-page
 document (~82%) would shrink to ~64%, which is worse than just printing it 1-up.
@@ -95,12 +103,12 @@ def strip_edge_stamps(ink, W, max_w=14.0, min_gap=6.0):
             removed += 1
     return ink, removed
 
-def measure(path, sizes, sample, pct=5.0, dpi=50, strip_edges=True, only=None):
+def measure(path, sizes, sample, dpi=50, strip_edges=True, only=None):
     """Content margins from per-page ink extents, in points.
 
-    Returns {1: odd-page margins, 0: even-page margins}, each as (L, B, R, T),
-    or None when nothing could be measured.  sizes[i] is page i+1's (w, h);
-    only, when given, limits the measurement to those page numbers.
+    Returns {page number: (L, B, R, T)} for every page with ink on it, or None
+    when nothing could be measured.  sizes[i] is page i+1's (w, h); only, when
+    given, limits the measurement to those page numbers.
 
     Renders each page to grayscale at a low dpi and takes the bounding box of
     everything darker than near-white.  The low dpi is doing real work: a scan
@@ -111,10 +119,7 @@ def measure(path, sizes, sample, pct=5.0, dpi=50, strip_edges=True, only=None):
     stay dark, so the box lands on the actual text block.  It is also far
     faster than rendering the full-resolution bitmap.
 
-    pct trims outliers (default 5th/95th percentile) so one odd page cannot
-    force a huge margin.  pct=0 uses the true min/max, which guarantees nothing
-    is ever clipped - use it when a single page carries extra content such as a
-    stamped header, which a percentile would discard as an outlier."""
+    See aggregate() for how the per-page boxes become one box per parity."""
     import tempfile, numpy as np
     from PIL import Image
     with tempfile.TemporaryDirectory() as d:
@@ -122,7 +127,7 @@ def measure(path, sizes, sample, pct=5.0, dpi=50, strip_edges=True, only=None):
                             str(path), d + "/p"], capture_output=True, text=True)
         if r.returncode != 0:
             return None
-        boxes, stamped, pages = {0: [], 1: []}, 0, 0
+        boxes, stamped, pages = {}, 0, 0
         for f in sorted(pathlib.Path(d).glob("p-*.pgm")):
             n = int(f.stem.rsplit("-", 1)[1])
             if only is not None and n not in only:
@@ -141,25 +146,35 @@ def measure(path, sizes, sample, pct=5.0, dpi=50, strip_edges=True, only=None):
             ph, pw = ink.shape
             # back to points via the page's own pixel dims, not the dpi ratio,
             # so pdftoppm's rounding cannot shift the box
-            boxes[n % 2].append((xs.min() / pw * W, ys.min() / ph * H,
-                                 (pw - 1 - xs.max()) / pw * W, (ph - 1 - ys.max()) / ph * H))
+            # L, B, R, T - PIL rows run top-down, so ys.min() is the top margin
+            boxes[n] = (xs.min() / pw * W, (ph - 1 - ys.max()) / ph * H,
+                        (pw - 1 - xs.max()) / pw * W, ys.min() / ph * H)
     if stamped:
         print(f"pdf2page: ignored a narrow side stamp on {stamped} of {pages} pages "
               f"(--keep-edges to count it)", file=sys.stderr)
-    if not boxes[0] and not boxes[1]:
-        return None
-    # a parity with nothing measured (a one-page document) borrows the other's box
+    return boxes or None
+
+def aggregate(boxes, pct=5.0):
+    """One content box per parity: {1: odd pages, 0: even pages}.
+
+    Scanned books place the text block differently on recto and verso pages, so
+    the two are kept apart; covering both with one box would waste the offset
+    between them as width.
+
+    pct trims outliers (default 5th/95th percentile) so one odd page cannot
+    force a huge margin.  pct=0 uses the true min/max, which guarantees nothing
+    is ever clipped - use it when a single page carries extra content such as a
+    stamped header, which a percentile would discard as an outlier."""
+    sides = {p: [b for n, b in boxes.items() if n % 2 == p] for p in (0, 1)}
+    # a parity with nothing measured (a one-page document) borrows the other's
     for p in (0, 1):
-        if not boxes[p]:
-            boxes[p] = boxes[1 - p]
+        if not sides[p]:
+            sides[p] = sides[1 - p]
     def q(vals, p):
         vals = sorted(vals)
         return vals[max(0, min(len(vals) - 1, round(p / 100 * (len(vals) - 1))))]
-    # PIL rows run top-down, so index 1 is the top margin and 3 the bottom;
-    # return them as L, B, R, T
-    return {p: (q([b[0] for b in bs], pct), q([b[3] for b in bs], pct),
-                q([b[2] for b in bs], pct), q([b[1] for b in bs], pct))
-            for p, bs in boxes.items()}
+    return {p: tuple(q([b[k] for b in bs], pct) for k in range(4))
+            for p, bs in sides.items()}
 
 def fmt(t):
     return f"L{t[0]:.0f} B{t[1]:.0f} R{t[2]:.0f} T{t[3]:.0f}"
@@ -187,6 +202,10 @@ def main():
                     help="outlier trim percentile; 0 = never clip anything (default 5)")
     ap.add_argument("--dpi", type=int, default=50,
                     help="resolution to measure at, dpi (default 50)")
+    ap.add_argument("--oversize", default="1up", choices=["1up", "2up"],
+                    help="what to do with pages holding a much wider block of text, "
+                         "such as a journal's front matter: give them a sheet of "
+                         "their own at full size (default) or shrink them in 2-up")
     ap.add_argument("--keep-edges", action="store_true",
                     help="count narrow strips of ink at the side edges (e.g. an OUP "
                          "'Downloaded from' stamp) as content instead of ignoring them")
@@ -246,6 +265,7 @@ def main():
               f"(a cover page?); placing untrimmed", file=sys.stderr)
 
     # content margins per parity: {1: odd pages, 0: even pages}
+    raw, one_up = {}, set()      # per-page boxes; pages to print one to a sheet
     if a.trim:
         try:
             v = tuple(float(x) for x in a.trim.replace(",", " ").split())
@@ -258,16 +278,44 @@ def main():
     elif a.preset == "none":
         marg = {1: (0, 0, 0, 0), 0: (0, 0, 0, 0)}
     elif a.preset == "auto":
-        marg = measure(src, sizes, a.sample, a.pct, a.dpi, not a.keep_edges,
-                       only={i + 1 for i in regular})
-        if marg is None:
+        raw = measure(src, sizes, a.sample, a.dpi, not a.keep_edges,
+                      only={i + 1 for i in regular})
+        if raw is None:
             print("pdf2page: could not measure content; falling back to no trim", file=sys.stderr)
             marg = {1: (0, 0, 0, 0), 0: (0, 0, 0, 0)}
+        else:
+            # A journal's front matter (Yale Law Journal's abstract and contents,
+            # say) sets the text across the full page while the article itself
+            # runs in a narrow block.  Two-upping both means sizing everything to
+            # the widest, so pages whose block is much bigger than the rest are
+            # measured out and printed one to a sheet at full size instead.
+            wide = set()
+            if a.oversize == "1up" and len(raw) > 2:
+                dims = {n: (sizes[n - 1][0] - b[0] - b[2], sizes[n - 1][1] - b[1] - b[3])
+                        for n, b in raw.items()}
+                mw = statistics.median(w for w, h in dims.values())
+                mh = statistics.median(h for w, h in dims.values())
+                wide = {n for n, (w, h) in dims.items()
+                        if w > mw + max(24.0, 0.1 * mw) or h > mh + max(24.0, 0.1 * mh)}
+                if wide and len(wide) < len(raw):
+                    shown = ", ".join(str(n) for n in sorted(wide)[:6])
+                    more = f" and {len(wide) - 6} more" if len(wide) > 6 else ""
+                    print(f"pdf2page: page{'s' if len(wide) > 1 else ''} {shown}{more} "
+                          f"hold{'' if len(wide) > 1 else 's'} a wider block of text; "
+                          f"printing {'them' if len(wide) > 1 else 'it'} 1-up "
+                          f"(--oversize 2up to shrink {'them' if len(wide) > 1 else 'it'} in)",
+                          file=sys.stderr)
+                else:
+                    wide = set()
+            one_up = {n - 1 for n in wide}
+            marg = aggregate({n: b for n, b in raw.items() if n not in wide}, a.pct)
     else:
         marg = {1: PRESETS[a.preset], 0: PRESETS[a.preset]}
 
     # never trim past the content, and never trim negative
-    trim = {p: tuple(max(0.0, x - a.margin) for x in m) for p, m in marg.items()}
+    def pare(m):
+        return tuple(max(0.0, x - a.margin) for x in m)
+    trim = {p: pare(m) for p, m in marg.items()}
     how = "manual" if a.trim else a.preset
     if trim[1] == trim[0]:
         print(f"pdf2page: {how} trim  {fmt(trim[1])}", file=sys.stderr)
@@ -281,15 +329,21 @@ def main():
     def box(i):
         # trimmed box in displayed coordinates, origin at the page's lower left
         (W, H) = sizes[i]
-        t = trim[(i + 1) % 2] if regular_size(sizes[i]) else (0.0, 0.0, 0.0, 0.0)
+        if not regular_size(sizes[i]):
+            t = (0.0, 0.0, 0.0, 0.0)
+        elif i in one_up:
+            t = pare(raw[i + 1])     # a 1-up page is trimmed to its own ink
+        else:
+            t = trim[(i + 1) % 2]
         x0, y0, x1, y1 = t[0], t[1], W - t[2], H - t[3]
         if x1 - x0 < 1 or y1 - y0 < 1:
             sys.exit(f"pdf2page: trim leaves nothing of page {i + 1}")
         return x0, y0, x1, y1
-    def fit(b):
-        return min(cell_w / (b[2] - b[0]), cell_h / (b[3] - b[1]))
+    def fit(b, w=None, h=None):
+        return min((w or cell_w) / (b[2] - b[0]), (h or cell_h) / (b[3] - b[1]))
     # one scale for the document, set by the worse-fitting parity of a regular page
-    scale = min(fit(box(i)) for i in regular[:2]) if regular else 1.0
+    paired = [i for i in regular if i not in one_up]
+    scale = min(fit(box(i)) for i in paired[:2]) if paired else 1.0
     print(f"pdf2page: text ends at ~{scale:.0%} of original size", file=sys.stderr)
     if scale < a.min_scale and not a.force:
         sys.exit(f"pdf2page: skipping - only {scale:.0%} of original size "
@@ -298,18 +352,36 @@ def main():
     if a.dry_run:
         return
 
+    # pair the pages up, giving each 1-up page a sheet of its own
+    plan, pair = [], []
+    for i in range(len(pages)):
+        if i in one_up:
+            if pair:
+                plan.append(pair); pair = []
+            plan.append([i])
+            continue
+        pair.append(i)
+        if len(pair) == 2:
+            plan.append(pair); pair = []
+    if pair:
+        plan.append(pair)
+
     writer = PdfWriter()
-    left = (SW - 2 * cell_w - a.gutter) / 2
-    bottom = (SH - cell_h) / 2
-    for i in range(0, len(pages), 2):
-        sheet = writer.add_blank_page(SW, SH)
+    for group in plan:
+        solo = len(group) == 1 and group[0] in one_up
+        # a 1-up page keeps the source's portrait shape and its own size
+        sheet_w, sheet_h = (SH, SW) if solo else (SW, SH)
+        cw, ch = ((sheet_w * a.scale, sheet_h * a.scale) if solo else (cell_w, cell_h))
+        left = (sheet_w - (cw if solo else 2 * cell_w + a.gutter)) / 2
+        bottom = (sheet_h - ch) / 2
+        sheet = writer.add_blank_page(sheet_w, sheet_h)
         ops, xobjects = [], DictionaryObject()
-        for slot, j in enumerate(range(i, min(i + 2, len(pages)))):
+        for slot, j in enumerate(group):
             b = box(j)
-            s = min(scale, fit(b))          # an oversized odd page still has to fit
+            s = min(1.0, fit(b, cw, ch)) if solo else min(scale, fit(b))
             w, h = (b[2] - b[0]) * s, (b[3] - b[1]) * s
-            ox = left + slot * (cell_w + a.gutter) + (cell_w - w) / 2
-            oy = bottom + (cell_h - h) / 2
+            ox = left + slot * (cell_w + a.gutter) + (cw - w) / 2
+            oy = bottom + (ch - h) / 2
             name = f"/P{j + 1}"
             xobjects[NameObject(name)] = form_xobject(writer, pages[j])
             # clip to the trimmed box on the sheet, then draw the whole page

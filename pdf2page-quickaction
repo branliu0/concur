@@ -31,7 +31,10 @@ run() {           # file [extra args] - runs pdf2page and records the outcome
   if (( rc == 0 )); then
     ok_in+=("$f"); ok_out+=("$out")
     m=("${(@M)lines:#*text ends at*}")
-    report+=("✓ $base -> ${out:t}  (${${m[1]#pdf2page: }:-done})")
+    local detail=${${m[1]#pdf2page: }:-done}
+    m=("${(@M)lines:#*1-up*}")          # note pages that got a sheet to themselves
+    (( $#m )) && detail+=", ${${m[1]#pdf2page: }%% \(--oversize*}"
+    report+=("✓ $base -> ${out:t}  ($detail)")
   elif [[ $msg == *"skipping"* ]]; then
     skipped+=("$f")
     m=("${(@M)lines:#*skipping*}")

@@ -57,10 +57,19 @@ wrapper expects `pdf2page` at `~/bin/pdf2page` and looks for uv in
    standing apart from the text, is treated as a download stamp (OUP's
    "Downloaded from academic.oup.com …") and left out of the box.
    `--keep-edges` turns this off.
-3. **Set aside cover pages.** JSTOR and HeinOnline downloads lead with a
-   cover page, often a different size and nearly full of text. Pages whose size
-   differs from the document's usual one are left out of the measurement,
-   placed untrimmed, and not allowed to set the scale for everything else.
+3. **Set aside pages unlike the rest.** JSTOR and HeinOnline downloads lead
+   with a cover page, often a different size and nearly full of text. Pages
+   whose size differs from the document's usual one are left out of the
+   measurement, placed untrimmed, and not allowed to set the scale for
+   everything else.
+
+   A page can also differ in its content rather than its size: journal front
+   matter (an abstract, a table of contents) often runs the full width of the
+   page while the article sits in a narrow block. Sizing everything to fit
+   those would shrink the article, so a page whose text block is much wider or
+   taller than the rest gets a sheet to itself at full size. Those sheets stay
+   portrait, so the output mixes orientations — printers cope, and
+   `--oversize 2up` turns it off.
 4. **Check it's worth it.** If the text would still end up below 85% of its
    original size, the file is skipped: 1-up would read better. `--force`
    overrides, `--min-scale` moves the threshold.
@@ -77,6 +86,7 @@ wrapper expects `pdf2page` at `~/bin/pdf2page` and looks for uv in
 | `-s, --scale` | `0.90` | Fraction of the sheet used, leaving a printable border |
 | `--gutter` | `36` | Gap between the two pages, pt |
 | `--paper` | `letter` | `letter`, `legal`, or `a4` |
+| `--oversize` | `1up` | `1up` gives pages with a much wider text block their own sheet; `2up` shrinks them in with the rest |
 | `--frame` | | Draw a box around each page |
 | `-f, --force` | | Make it even if the text would shrink a lot |
 | `--min-scale` | `0.85` | Skip threshold |
