@@ -39,11 +39,13 @@ So this skips anything falling below --min-scale unless you pass --force.
   pdf2page -s 0.96 --gutter 14 x.pdf  # tighter margins, larger text
 
 Measuring renders pages at --dpi (50), which both runs fast on 600dpi scans and
-keeps edge speckle from swallowing the margins.  A scan of a journal page often
-carries a download stamp in the bottom margin; that is real ink, so the measured
-box includes it and the text ends up smaller than it needs to be.  Pass --trim
-with a bottom margin that cuts the stamp to reclaim it.  (Stamps running down
-the side of the page, like OUP's, are detected and ignored automatically.)
+keeps edge speckle from swallowing the margins.  Download stamps - OUP's down
+the side of the page, Cambridge Core's across the foot - are real ink, so a
+measured box would include them and shrink the text for nothing; they are
+detected and ignored (--keep-edges counts them).  A stamp narrower than the
+text block, such as JSTOR's centred one, is left alone, because at that point
+it looks exactly like a folio or a footnote: pass --trim with a bottom margin
+that cuts it to reclaim that band.
 
 Needs poppler's pdftoppm on PATH for measuring; the layout itself is pypdf.
 """
@@ -63,43 +65,94 @@ PAPER = {             # landscape sheet, w x h in points
     "a4":     (841.89, 595.28),
 }
 
-def strip_edge_stamps(ink, W, max_w=14.0, min_gap=6.0):
-    """Blank out narrow vertical strips of ink at the left/right page edges.
-
-    Publisher platforms (OUP's "Downloaded from academic.oup.com ...") stamp a
-    line of rotated text down the side of every page.  It is real ink, so the
-    bounding box swallows it and the side margin measures as nearly zero.  A
-    strip at most max_w pt wide, standing apart from the rest of the ink by at
-    least min_gap pt, is taken to be such a stamp.  Only the sides are checked:
-    a narrow band at the top or bottom is usually a running head or page
-    number, which must not be clipped.  Returns (ink, strips removed)."""
-    pw = ink.shape[1]
-    cols = ink.any(axis=0)
-    xs = cols.nonzero()[0]
-    # runs of consecutive inked columns
-    runs = [[xs[0], xs[0]]]
-    for x in xs[1:]:
+def runs_of(mask):
+    """Runs of consecutive True values, as [start, end] index pairs."""
+    idx = mask.nonzero()[0]
+    if not len(idx):
+        return []
+    runs = [[idx[0], idx[0]]]
+    for x in idx[1:]:
         if x == runs[-1][1] + 1:
             runs[-1][1] = x
         else:
             runs.append([x, x])
-    pt = W / pw
-    removed = 0
-    for side in (0, -1):
-        if not runs:
-            break
-        a, b = runs[side]
-        if len(runs) > 1:
-            nb = runs[1] if side == 0 else runs[-2]
-            gap = (nb[0] - b - 1) if side == 0 else (a - nb[1] - 1)
-            stamp = gap * pt >= min_gap
+    return runs
+
+def merge_runs(runs, pt, min_gap):
+    """Join runs closer together than min_gap pt: a stamp is a few lines of
+    text, and the leading between them is much smaller than the margin of
+    whitespace that separates the stamp as a whole from the page's content."""
+    out = []
+    for r in runs:
+        if out and (r[0] - out[-1][1] - 1) * pt < min_gap:
+            out[-1][1] = r[1]
         else:
-            # an otherwise blank page: a lone strip hugging the edge
-            stamp = (b < pw * 0.1) if side == 0 else (a > pw * 0.9)
-        if (b - a + 1) * pt <= max_w and stamp:
+            out.append(list(r))
+    return out
+
+def strip_stamps(ink, W, H, max_w=14.0, max_h=26.0, min_gap=6.0, wider_by=12.0):
+    """Blank out a download stamp standing in the margin, if there is one.
+
+    Publishers stamp every page: OUP runs a line of rotated text down the side
+    ("Downloaded from academic.oup.com ..."), Cambridge Core a couple of lines
+    across the foot of the page.  It is real ink, so the bounding box swallows
+    it and that margin measures as nearly zero.
+
+    Down the side, a stamp is a strip at most max_w pt wide standing at least
+    min_gap pt clear of everything else.  Across the top or bottom the same
+    shape describes a running head or a page number, which must not be clipped,
+    so a band there also has to be wider than the text block it sits under - by
+    wider_by pt - which a stamp reaching toward the page edges is and a
+    centred folio is not.  Returns (ink, stamps removed)."""
+    removed = 0
+    for _ in range(4):              # a stamp can run to two or three lines
+        gone = False
+        # down the sides first (a column profile), then top and bottom (rows)
+        for vertical, size, limit, check_width in ((True, W, max_w, False),
+                                                   (False, H, max_h, True)):
+            pt = size / (ink.shape[1] if vertical else ink.shape[0])
+            runs = merge_runs(runs_of(ink.any(axis=0 if vertical else 1)), pt, min_gap)
+            for side in (0, -1):
+                if len(runs) < 2:
+                    continue
+                a, b = runs[side]
+                nb = runs[1] if side == 0 else runs[-2]
+                gap = (nb[0] - b - 1) if side == 0 else (a - nb[1] - 1)
+                if (b - a + 1) * pt > limit or gap * pt < min_gap:
+                    continue
+                if check_width:
+                    # the band against the ink that remains without it
+                    band = ink[a:b + 1, :]
+                    rest = ink.copy()
+                    rest[a:b + 1, :] = False
+                    bx, rx = runs_of(band.any(axis=0)), runs_of(rest.any(axis=0))
+                    if not bx or not rx:
+                        continue
+                    span = (bx[-1][1] - bx[0][0]) - (rx[-1][1] - rx[0][0])
+                    if span * (W / ink.shape[1]) < wider_by:
+                        continue
+                ink = ink.copy()
+                if vertical:
+                    ink[:, a:b + 1] = False
+                else:
+                    ink[a:b + 1, :] = False
+                removed += 1
+                gone = True
+                break
+            if gone:
+                break
+        if not gone or not ink.any():
+            break
+    if not ink.any():
+        return ink, removed
+    # an otherwise blank page: a lone strip hugging a side edge is still a stamp
+    runs = merge_runs(runs_of(ink.any(axis=0)), W / ink.shape[1], min_gap)
+    if len(runs) == 1:
+        a, b = runs[0]
+        pw = ink.shape[1]
+        if (b - a + 1) * (W / pw) <= max_w and (b < pw * 0.1 or a > pw * 0.9):
             ink = ink.copy()
             ink[:, a:b + 1] = False
-            runs.pop(side)
             removed += 1
     return ink, removed
 
@@ -138,7 +191,7 @@ def measure(path, sizes, sample, dpi=50, strip_edges=True, only=None):
                 continue
             pages += 1
             if strip_edges:
-                ink, k = strip_edge_stamps(ink, W)
+                ink, k = strip_stamps(ink, W, H)
                 stamped += k > 0
                 if not ink.any():
                     continue
@@ -150,7 +203,7 @@ def measure(path, sizes, sample, dpi=50, strip_edges=True, only=None):
             boxes[n] = (xs.min() / pw * W, (ph - 1 - ys.max()) / ph * H,
                         (pw - 1 - xs.max()) / pw * W, ys.min() / ph * H)
     if stamped:
-        print(f"pdf2page: ignored a narrow side stamp on {stamped} of {pages} pages "
+        print(f"pdf2page: ignored a stamp in the margin on {stamped} of {pages} pages "
               f"(--keep-edges to count it)", file=sys.stderr)
     return boxes or None
 
@@ -207,8 +260,8 @@ def main():
                          "such as a journal's front matter: give them a sheet of "
                          "their own at full size (default) or shrink them in 2-up")
     ap.add_argument("--keep-edges", action="store_true",
-                    help="count narrow strips of ink at the side edges (e.g. an OUP "
-                         "'Downloaded from' stamp) as content instead of ignoring them")
+                    help="count download stamps in the margins (an OUP or Cambridge "
+                         "'Downloaded from' line) as content instead of ignoring them")
     ap.add_argument("--trim", metavar='"L B R T"',
                     help="content margins in pt, overriding the measurement; --margin "
                          "is still subtracted from each. Four numbers apply to every "

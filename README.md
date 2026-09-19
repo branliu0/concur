@@ -53,10 +53,14 @@ wrapper expects `pdf2page` at `~/bin/pdf2page` and looks for uv in
    of a scan blurs away, while text stays dark. Odd and even pages are measured
    separately, since scanned books place the text block differently on left-
    and right-hand pages.
-2. **Ignore side stamps.** A thin strip of ink along the left or right edge,
-   standing apart from the text, is treated as a download stamp (OUP's
-   "Downloaded from academic.oup.com …") and left out of the box.
-   `--keep-edges` turns this off.
+2. **Ignore download stamps.** A thin strip of ink standing clear of the text
+   is treated as a publisher's stamp and left out of the box — OUP's
+   "Downloaded from academic.oup.com …" down the side, Cambridge Core's couple
+   of lines across the foot. A band at the top or bottom has to be *wider* than
+   the text block to count, so running heads and page numbers are never
+   clipped. That also means a stamp narrower than the text block, like JSTOR's
+   centred one, is left in: cut it with `--trim` instead. `--keep-edges` turns
+   the whole thing off.
 3. **Set aside pages unlike the rest.** JSTOR and HeinOnline downloads lead
    with a cover page, often a different size and nearly full of text. Pages
    whose size differs from the document's usual one are left out of the
@@ -82,6 +86,7 @@ wrapper expects `pdf2page` at `~/bin/pdf2page` and looks for uv in
 |---|---|---|
 | `-p, --preset` | `auto` | `auto` measures; `booklet` / `full` use fixed margins; `none` doesn't trim |
 | `--trim "L B R T"` | | Set content margins yourself, in points. Eight numbers set odd pages, then even. Handy for cutting a stamp under the text, like JSTOR's |
+| `--keep-edges` | | Treat download stamps as content instead of ignoring them |
 | `-m, --margin` | `10` | Whitespace kept around the content, pt |
 | `-s, --scale` | `0.90` | Fraction of the sheet used, leaving a printable border |
 | `--gutter` | `36` | Gap between the two pages, pt |
