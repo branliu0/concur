@@ -39,17 +39,18 @@ So this skips anything falling below --min-scale unless you pass --force.
   pdf2page -s 0.96 --gutter 14 x.pdf  # tighter margins, larger text
 
 Measuring renders pages at --dpi (50), which both runs fast on 600dpi scans and
-keeps edge speckle from swallowing the margins.  Download stamps - OUP's down
-the side of the page, Cambridge Core's across the foot - are real ink, so a
-measured box would include them and shrink the text for nothing; they are
-detected and ignored (--keep-edges counts them).  A stamp narrower than the
-text block, such as JSTOR's centred one, is left alone, because at that point
-it looks exactly like a folio or a footnote: pass --trim with a bottom margin
-that cuts it to reclaim that band.
+keeps edge speckle from swallowing the margins.  Download stamps - JSTOR's
+under the text block, OUP's down the side, Cambridge Core's across the foot -
+are real ink, so a measured box would include them and shrink the text for
+nothing.  They are found by reading the extracted text for the lines publishers
+stamp (see STAMPS), which is the only thing that separates JSTOR's footer from
+the footnote it sits under; a stamp standing clear of the text in a scan with
+no text layer is caught by its shape instead.  --keep-edges counts them as
+content.
 
 Needs poppler's pdftoppm on PATH for measuring; the layout itself is pypdf.
 """
-import argparse, subprocess, sys, pathlib
+import argparse, re, subprocess, sys, pathlib
 import statistics
 
 SIZE_TOL = 8.0        # pt; scans wander a point or two between pages
@@ -64,6 +65,73 @@ PAPER = {             # landscape sheet, w x h in points
     "legal":  (1008.0, 612.0),
     "a4":     (841.89, 595.28),
 }
+
+# Lines a publisher stamps on every page.  Matched against the extracted text,
+# which is the only thing that tells a stamp apart from a footnote when the two
+# are the same shape and size - JSTOR's sits centred under the text block,
+# exactly where a footnote would.
+STAMPS = re.compile(r"""
+      this\s+content\s+downloaded            # JSTOR
+    | all\s+use\s+subject\s+to
+    | jstor\s+terms\s+and\s+conditions
+    | downloaded\s+from\s+ht|downloaded\s+from\s+(www\.|academic\.)  # OUP, Cambridge
+    | subject\s+to\s+the\s+cambridge\s+core
+    | content\s+downloaded/printed\s+from     # HeinOnline
+    | heinonline
+    | electronic\s+copy\s+available\s+at     # SSRN
+    | terms\s+of\s+use,?\s+available\s+at
+""", re.X | re.I)
+
+def stamp_boxes(path, sample):
+    """Where each page's download stamps sit: {page: [(x0, y0, x1, y1)]}, in
+    points from the top left.
+
+    pdftotext -bbox gives every word's box; words sharing a baseline are joined
+    back into a line, and a line whose text matches STAMPS is a stamp.  Reading
+    the words is what makes this reliable - geometry alone cannot separate
+    JSTOR's centred footer from the footnotes right above it."""
+    r = subprocess.run(["pdftotext", "-bbox", "-l", str(sample), str(path), "-"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return {}
+    out, page, words = {}, 0, []
+    def flush():
+        # group words into lines by their top edge, then match each line
+        if not words:
+            return
+        lines = []
+        for w in sorted(words, key=lambda w: (round(w[1]), w[0])):
+            if lines and abs(lines[-1][0][1] - w[1]) <= 2.0:
+                lines[-1].append(w)
+            else:
+                lines.append([w])
+        # a stamp runs to two or three lines and only one of them carries the
+        # give-away words: JSTOR's middle line is a bare IP address and date,
+        # so a matched line takes the block it sits in with it
+        blocks = []
+        for line in lines:
+            box = (min(w[0] for w in line), min(w[1] for w in line),
+                   max(w[2] for w in line), max(w[3] for w in line))
+            text = " ".join(w[4] for w in line)
+            if blocks and box[1] - blocks[-1][0][3] < 6.0:
+                blocks[-1][0] = (min(blocks[-1][0][0], box[0]), blocks[-1][0][1],
+                                 max(blocks[-1][0][2], box[2]), box[3])
+                blocks[-1][1] += " " + text
+            else:
+                blocks.append([box, text])
+        for box, text in blocks:
+            if STAMPS.search(text):
+                out.setdefault(page, []).append(box)
+    for m in re.finditer(r"<page width=|<word xMin=\"([\d.]+)\" yMin=\"([\d.]+)\" "
+                         r"xMax=\"([\d.]+)\" yMax=\"([\d.]+)\">([^<]*)</word>", r.stdout):
+        if m.group(0).startswith("<page"):
+            flush()
+            words, page = [], page + 1
+            continue
+        words.append((float(m.group(1)), float(m.group(2)), float(m.group(3)),
+                      float(m.group(4)), m.group(5)))
+    flush()
+    return out
 
 def runs_of(mask):
     """Runs of consecutive True values, as [start, end] index pairs."""
@@ -156,7 +224,7 @@ def strip_stamps(ink, W, H, max_w=14.0, max_h=26.0, min_gap=6.0, wider_by=12.0):
             removed += 1
     return ink, removed
 
-def measure(path, sizes, sample, dpi=50, strip_edges=True, only=None):
+def measure(path, sizes, sample, dpi=50, strip_edges=True, only=None, stamps=None):
     """Content margins from per-page ink extents, in points.
 
     Returns {page number: (L, B, R, T)} for every page with ink on it, or None
@@ -180,13 +248,25 @@ def measure(path, sizes, sample, dpi=50, strip_edges=True, only=None):
                             str(path), d + "/p"], capture_output=True, text=True)
         if r.returncode != 0:
             return None
-        boxes, stamped, pages = {}, 0, 0
+        boxes, stamped, pages, found = {}, 0, 0, 0
         for f in sorted(pathlib.Path(d).glob("p-*.pgm")):
             n = int(f.stem.rsplit("-", 1)[1])
             if only is not None and n not in only:
                 continue
             W, H = sizes[n - 1]
             ink = np.array(Image.open(f)) < 200
+            if not ink.any():
+                continue
+            pages += 1
+            if (stamps or {}).get(n):
+                found += 1
+            for x0, y0, x1, y1 in (stamps or {}).get(n, ()):
+                # blank the stamp where the text says it is, with a little slack
+                # for the ink that antialiasing spreads past the glyph box
+                ink[max(0, int((y0 - 1) / H * ink.shape[0])):
+                    int((y1 + 1) / H * ink.shape[0]) + 1,
+                    max(0, int((x0 - 1) / W * ink.shape[1])):
+                    int((x1 + 1) / W * ink.shape[1]) + 1] = False
             # A speck of dust on the platen is one dark pixel in a row that a
             # line of text fills fifty of, but a bounding box has to enclose it
             # all the same - and a single speck near the edge of the sheet
@@ -197,7 +277,6 @@ def measure(path, sizes, sample, dpi=50, strip_edges=True, only=None):
             ink &= (ink.sum(axis=0) >= max(2, round(0.01 * ph)))[None, :]
             if not ink.any():
                 continue
-            pages += 1
             if strip_edges:
                 ink, k = strip_stamps(ink, W, H)
                 stamped += k > 0
@@ -209,9 +288,15 @@ def measure(path, sizes, sample, dpi=50, strip_edges=True, only=None):
             # L, B, R, T - PIL rows run top-down, so ys.min() is the top margin
             boxes[n] = (xs.min() / pw * W, (ph - 1 - ys.max()) / ph * H,
                         (pw - 1 - xs.max()) / pw * W, ys.min() / ph * H)
-    if stamped:
-        print(f"pdf2page: ignored a stamp in the margin on {stamped} of {pages} pages "
-              f"(--keep-edges to count it)", file=sys.stderr)
+    if found or stamped:
+        how = []
+        if found:
+            how.append(f"{found} named in the text")
+        if stamped:
+            how.append(f"{stamped} by shape")
+        print(f"pdf2page: ignored download stamps on {max(found, stamped)} "
+              f"of {pages} pages ({', '.join(how)}; --keep-edges to count them)",
+              file=sys.stderr)
     return boxes or None
 
 def aggregate(boxes, pct=5.0):
@@ -338,8 +423,9 @@ def main():
     elif a.preset == "none":
         marg = {1: (0, 0, 0, 0), 0: (0, 0, 0, 0)}
     elif a.preset == "auto":
+        stamps = {} if a.keep_edges else stamp_boxes(src, a.sample)
         raw = measure(src, sizes, a.sample, a.dpi, not a.keep_edges,
-                      only={i + 1 for i in regular})
+                      only={i + 1 for i in regular}, stamps=stamps)
         if raw is None:
             print("pdf2page: could not measure content; falling back to no trim", file=sys.stderr)
             marg = {1: (0, 0, 0, 0), 0: (0, 0, 0, 0)}

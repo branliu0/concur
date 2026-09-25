@@ -53,14 +53,19 @@ wrapper expects `pdf2page` at `~/bin/pdf2page` and looks for uv in
    of a scan blurs away, while text stays dark. Odd and even pages are measured
    separately, since scanned books place the text block differently on left-
    and right-hand pages.
-2. **Ignore download stamps.** A thin strip of ink standing clear of the text
-   is treated as a publisher's stamp and left out of the box — OUP's
-   "Downloaded from academic.oup.com …" down the side, Cambridge Core's couple
-   of lines across the foot. A band at the top or bottom has to be *wider* than
-   the text block to count, so running heads and page numbers are never
-   clipped. That also means a stamp narrower than the text block, like JSTOR's
-   centred one, is left in: cut it with `--trim` instead. `--keep-edges` turns
-   the whole thing off.
+2. **Ignore download stamps.** Publishers stamp every page — JSTOR's "This
+   content downloaded from …" under the text block, OUP's down the side,
+   Cambridge Core's across the foot, HeinOnline's, SSRN's. pdf2page reads the
+   extracted text and drops the lines that match (see `STAMPS` in the script),
+   taking the whole block with them, since JSTOR's middle line is a bare IP
+   address and date. Reading the words is what makes this safe: JSTOR's footer
+   sits exactly where a footnote would, so no amount of geometry tells them
+   apart.
+
+   In a scan with no text layer, a stamp is caught by shape instead: a thin
+   strip standing clear of the text. A band at the top or bottom also has to be
+   *wider* than the text block, so running heads and page numbers are never
+   clipped. `--keep-edges` turns both off.
 3. **Set aside pages unlike the rest.** JSTOR and HeinOnline downloads lead
    with a cover page, often a different size and nearly full of text. Pages
    whose size differs from the document's usual one are left out of the
