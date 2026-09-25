@@ -70,8 +70,9 @@ wrapper expects `pdf2page` at `~/bin/pdf2page` and looks for uv in
    A page can also differ in its content rather than its size: journal front
    matter (an abstract, a table of contents) often runs the full width of the
    page while the article sits in a narrow block. Sizing everything to fit
-   those would shrink the article, so a page whose text block is much wider or
-   taller than the rest gets a sheet to itself at full size. Those sheets stay
+   those would shrink the article, so a page whose text block is much *wider*
+   than the rest gets a sheet to itself at full size. Only width counts — a
+   page's measured height moves around with its footnotes. Those sheets stay
    portrait, so the output mixes orientations — printers cope, and
    `--oversize 2up` turns it off.
 4. **Check it's worth it.** If the text would still end up below 85% of its

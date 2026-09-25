@@ -187,6 +187,14 @@ def measure(path, sizes, sample, dpi=50, strip_edges=True, only=None):
                 continue
             W, H = sizes[n - 1]
             ink = np.array(Image.open(f)) < 200
+            # A speck of dust on the platen is one dark pixel in a row that a
+            # line of text fills fifty of, but a bounding box has to enclose it
+            # all the same - and a single speck near the edge of the sheet
+            # swallows that whole margin.  Rows and columns carrying less than
+            # ~1% of their length in ink are dropped as noise.
+            ph, pw = ink.shape
+            ink &= (ink.sum(axis=1) >= max(2, round(0.01 * pw)))[:, None]
+            ink &= (ink.sum(axis=0) >= max(2, round(0.01 * ph)))[None, :]
             if not ink.any():
                 continue
             pages += 1
@@ -196,7 +204,6 @@ def measure(path, sizes, sample, dpi=50, strip_edges=True, only=None):
                 if not ink.any():
                     continue
             ys, xs = np.where(ink)
-            ph, pw = ink.shape
             # back to points via the page's own pixel dims, not the dpi ratio,
             # so pdftoppm's rounding cannot shift the box
             # L, B, R, T - PIL rows run top-down, so ys.min() is the top margin
@@ -344,12 +351,12 @@ def main():
             # measured out and printed one to a sheet at full size instead.
             wide = set()
             if a.oversize == "1up" and len(raw) > 2:
-                dims = {n: (sizes[n - 1][0] - b[0] - b[2], sizes[n - 1][1] - b[1] - b[3])
-                        for n, b in raw.items()}
-                mw = statistics.median(w for w, h in dims.values())
-                mh = statistics.median(h for w, h in dims.values())
-                wide = {n for n, (w, h) in dims.items()
-                        if w > mw + max(24.0, 0.1 * mw) or h > mh + max(24.0, 0.1 * mh)}
+                # width only: a page's measured height wanders with the footnote
+                # block, and speckle at the edge of a scan can stretch it by a
+                # third of the page, which is not a reason to break the pairing
+                widths = {n: sizes[n - 1][0] - b[0] - b[2] for n, b in raw.items()}
+                mw = statistics.median(widths.values())
+                wide = {n for n, w in widths.items() if w > mw + max(24.0, 0.1 * mw)}
                 if wide and len(wide) < len(raw):
                     shown = ", ".join(str(n) for n in sorted(wide)[:6])
                     more = f" and {len(wide) - 6} more" if len(wide) > 6 else ""
