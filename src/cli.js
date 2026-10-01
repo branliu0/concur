@@ -13,9 +13,9 @@ const USAGE = `usage: concur [options] input.pdf [output.pdf]
 
 Print a PDF 2-up with margins trimmed.
 
-  -p, --preset NAME    auto (measure; default), booklet, full, or none
       --trim "L B R T" content margins in pt, overriding the measurement;
                        eight numbers set odd pages, then even
+      --no-trim        plain 2-up: leave the margins as they are
       --keep-edges     count download stamps as content instead of ignoring them
       --keep-cover     keep the cover page JSTOR and HeinOnline put in front
   -m, --margin PT      whitespace to keep around the content (default 10)
@@ -40,7 +40,7 @@ try {
   args = parseArgs({
     allowPositionals: true,
     options: {
-      preset: { type: 'string', short: 'p' },
+      'no-trim': { type: 'boolean' },
       margin: { type: 'string', short: 'm' },
       scale: { type: 'string', short: 's' },
       paper: { type: 'string' },
@@ -75,7 +75,7 @@ const num = (name, fallback) => {
 if (v.oversize && !['1up', '2up'].includes(v.oversize)) die('--oversize wants 1up or 2up');
 
 const options = {
-  preset: v.preset ?? DEFAULTS.preset,
+  noTrim: !!v['no-trim'],
   margin: num('margin', DEFAULTS.margin),
   scale: num('scale', DEFAULTS.scale),
   paper: v.paper ?? DEFAULTS.paper,

@@ -12,11 +12,6 @@ import {
 
 const SIZE_TOL = 8.0;         // pt; scans wander a point or two between pages
 
-export const PRESETS = {      // L, B, R, T content margins in points
-  booklet: [155, 145, 155, 118],
-  full: [54, 40, 53, 30],
-};
-
 export const PAPER = {        // landscape sheet, w x h in points
   letter: [792.0, 612.0],
   legal: [1008.0, 612.0],
@@ -24,7 +19,7 @@ export const PAPER = {        // landscape sheet, w x h in points
 };
 
 export const DEFAULTS = {
-  preset: 'auto', margin: 10.0, scale: 0.90, paper: 'letter', gutter: 36.0,
+  noTrim: false, margin: 10.0, scale: 0.90, paper: 'letter', gutter: 36.0,
   frame: false, dryRun: false, force: false, minScale: 0.85, sample: 40,
   pct: 5.0, dpi: 50, oversize: '1up', keepEdges: false, keepCover: false, trim: null,
 };
@@ -534,9 +529,9 @@ async function run(bytes, a, pdfjsDoc, env, log) {
         + 'or eight (odd pages, then even)');
     }
     marg = { 1: v.slice(0, 4), 0: v.length === 8 ? v.slice(4) : v.slice(0, 4) };
-  } else if (a.preset === 'none') {
+  } else if (a.noTrim) {
     marg = { 1: [0, 0, 0, 0], 0: [0, 0, 0, 0] };
-  } else if (a.preset === 'auto') {
+  } else {
     let measured = null;
     try {
       const doc = await pdfjsDoc();
@@ -581,16 +576,12 @@ async function run(bytes, a, pdfjsDoc, env, log) {
       oneUp = new Set([...wide].map((n) => n - 1));
       marg = aggregate(new Map([...raw].filter(([n]) => !wide.has(n))), a.pct);
     }
-  } else if (PRESETS[a.preset]) {
-    marg = { 1: PRESETS[a.preset], 0: PRESETS[a.preset] };
-  } else {
-    throw new ConcurError(`unknown --preset ${a.preset}; choose from auto, booklet, full, none`);
   }
 
   // never trim past the content, and never trim negative
   const pare = (m) => m.map((x) => Math.max(0.0, x - a.margin));
   const trim = { 0: pare(marg[0]), 1: pare(marg[1]) };
-  const how = a.trim ? 'manual' : a.preset;
+  const how = a.trim ? 'manual' : a.noTrim ? 'no' : 'auto';
   if (trim[1].every((x, k) => x === trim[0][k])) log(`${how} trim  ${fmt(trim[1])}`);
   else log(`${how} trim  odd ${fmt(trim[1])}  even ${fmt(trim[0])}`);
 

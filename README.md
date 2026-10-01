@@ -85,7 +85,7 @@ show whether a change moved anything; see `test/samples.js`.
 
 | Option | Default | |
 |---|---|---|
-| `-p, --preset` | `auto` | `auto` measures; `booklet` / `full` use fixed margins; `none` doesn't trim |
+| `--no-trim` | | Plain 2-up: leave the margins as they are |
 | `--trim "L B R T"` | | Set content margins yourself, in points. Eight numbers set odd pages, then even. Handy for cutting a stamp under the text, like JSTOR's |
 | `--keep-edges` | | Treat download stamps as content instead of ignoring them |
 | `--keep-cover` | | Keep the cover page JSTOR and HeinOnline put in front |
@@ -106,9 +106,11 @@ The exit status is 1 when a file is skipped or fails.
 ## pdf2page, the Python original
 
 concur began as `pdf2page`, a single Python script that is still here. It
-takes the same options and makes the same decisions, except that it places a
-cover page untrimmed where concur leaves it out, and its measured trims come
-out a point or two apart, because poppler and pdf.js antialias differently.
+makes the same decisions, with three differences: it places a cover page
+untrimmed where concur leaves it out; it still has the fixed-margin presets
+(`-p booklet`, `-p full`, and `-p none` for concur's `--no-trim`) from before
+it learned to measure; and its measured trims come out a point or two apart,
+because poppler and pdf.js antialias differently.
 
 It needs [uv](https://docs.astral.sh/uv/), which fetches its Python
 dependencies on first use, and poppler (`brew install poppler`). Put it
