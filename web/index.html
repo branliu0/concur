@@ -64,6 +64,12 @@
   details.options .grid { display: grid; gap: 8px; padding: 12px 0 0 2px; color: var(--fg); }
   details.options label { display: flex; gap: 8px; align-items: center; }
   select { font: inherit; }
+  .examples {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    margin: 18px 2px 0; font-size: 14px; color: var(--dim);
+  }
+  .examples b { color: var(--fg); font-weight: 600; }
+  .examples .what { flex: 1 1 240px; }
   #files { list-style: none; margin: 28px 0 0; padding: 0; display: grid; gap: 10px; }
   #files li {
     padding: 14px 16px; background: var(--card); border: 1px solid var(--line);
@@ -133,6 +139,13 @@
       <label><input type="checkbox" id="frame"> Draw a box around each page</label>
     </div>
   </details>
+
+  <div class="examples">
+    <span class="what">Example: <b>a Supreme Court opinion</b>,
+      <i>Obergefell v. Hodges</i></span>
+    <a class="button" href="examples/obergefell.pdf" target="_blank">Original</a>
+    <a class="button" href="examples/obergefell-2up.pdf" target="_blank">Two to a page</a>
+  </div>
 
   <ul id="files"></ul>
 

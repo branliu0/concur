@@ -7,6 +7,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { pdf2page } from '../src/core.js';
+import { env } from '../src/node-env.js';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const pkg = (name) => path.join(root, 'node_modules', name);
@@ -23,6 +25,14 @@ for (const f of ['build/pdf.min.mjs', 'build/pdf.worker.min.mjs']) {
 }
 // fonts and decoders pdf.js fetches on demand while rendering
 for (const d of ['standard_fonts', 'cmaps', 'wasm', 'iccs']) cp(path.join(pdfjs, d), `vendor/pdfjs/${d}`);
+// each example gets its 2-up made by the tool itself, to sit beside it
+const examples = path.join(site, 'examples');
+for (const f of fs.existsSync(examples) ? fs.readdirSync(examples) : []) {
+  if (!f.endsWith('.pdf')) continue;
+  const { pdf } = await pdf2page(new Uint8Array(fs.readFileSync(path.join(examples, f))), {}, env);
+  fs.writeFileSync(path.join(examples, f.replace(/\.pdf$/, '-2up.pdf')), pdf);
+}
+
 // the scripting sandbox for PDF forms, which nothing here uses
 for (const f of fs.readdirSync(path.join(site, 'vendor/pdfjs/wasm'))) {
   if (f.startsWith('quickjs')) fs.rmSync(path.join(site, 'vendor/pdfjs/wasm', f));
@@ -41,6 +51,8 @@ for (const f of ['core.js', 'app.js']) {
 const files = fs.readdirSync(site, { recursive: true, withFileTypes: true })
   .filter((d) => d.isFile() && d.name !== 'sw.js')
   .map((d) => path.relative(site, path.join(d.parentPath, d.name)).split(path.sep).join('/'))
+  // the examples are for looking at, not for working offline with
+  .filter((f) => !f.startsWith('examples/'))
   .sort();
 const hash = crypto.createHash('sha256');
 for (const f of files) hash.update(f).update(fs.readFileSync(path.join(site, f)));
@@ -52,3 +64,5 @@ fs.writeFileSync(path.join(site, 'sw.js'), sw);
 // stop GitHub Pages running the site through Jekyll
 fs.writeFileSync(path.join(site, '.nojekyll'), '');
 console.log(`built ${path.relative(root, site)}/`);
+// pdf.js keeps a worker alive that would otherwise hold the process open
+process.exit(0);
