@@ -72,7 +72,10 @@
   .name { font-weight: 600; overflow-wrap: anywhere; }
   .status { margin-top: 2px; font-size: 14px; color: var(--dim); }
   li.ok .status { color: var(--ok); }
-  #files li.small { border-color: var(--warn); }
+  #files li.small {
+    border: 1.5px solid var(--warn);
+    background: color-mix(in srgb, var(--warn) 14%, var(--card));
+  }
   .warning { margin-top: 4px; color: var(--warn); font-weight: 600; }
   .warning::before { content: "\26A0\FE0E  "; }
   li.failed .status { color: var(--accent); }
@@ -148,8 +151,8 @@
     <h2>What it does</h2>
     <p>Law review articles and Supreme Court opinions have large margins
     when printed on letter paper: the text was set for a much smaller page.
-    Put two of those pages on one sheet as they are, and most of the sheet is
-    still margin while the text is tiny.</p>
+    Printing two pages per sheet the usual way shrinks those margins along
+    with the text, so you get tiny print surrounded by blank paper.</p>
     <p>This measures where the text actually is and trims the margins away
     before placing the pages side by side, so it usually prints close to its
     original size on half the paper.</p>
