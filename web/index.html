@@ -5,12 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>pdf2page</title>
 <meta name="description" content="Print a PDF two pages to a sheet without the text shrinking to nothing.">
-<script type="importmap">
-{ "imports": {
-    "@cantoo/pdf-lib": "./vendor/pdf-lib.mjs",
-    "pdfjs-dist": "./vendor/pdfjs/pdf.min.mjs"
-} }
-</script>
+<!-- The browser enforces this: the page may only load its own files and may
+     not send anything to any other site. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self'; object-src 'self' blob:; frame-src 'self' blob:; form-action 'none'; base-uri 'none'">
 <style>
   :root {
     --bg: #faf8f4; --fg: #22201c; --dim: #6f6a60; --line: #dcd6c9;
@@ -90,8 +87,10 @@
   li details { margin-top: 10px; font-size: 13px; color: var(--dim); }
   li details summary { cursor: pointer; width: fit-content; }
   li pre { margin: 6px 0 0; white-space: pre-wrap; font: 12px/1.5 ui-monospace, Menlo, monospace; }
-  footer { margin-top: 36px; font-size: 14px; color: var(--dim); }
-  footer p { margin: 0 0 8px; }
+  section { margin-top: 36px; font-size: 14px; color: var(--dim); }
+  section h2 { margin: 0 0 6px; font-size: 14px; color: var(--fg); }
+  section p { margin: 0 0 8px; }
+  #offline.ready { color: var(--ok); }
   a { color: inherit; }
 </style>
 </head>
@@ -108,7 +107,7 @@
       <div class="sheet"><i></i><i></i></div>
     </div>
     <strong>Drop PDFs here, or click to choose</strong>
-    <span>They stay on your computer. Nothing is uploaded.</span>
+    <span>Your files never leave this computer.</span>
     <input id="pick" type="file" accept="application/pdf,.pdf" multiple>
   </label>
 
@@ -132,14 +131,26 @@
 
   <ul id="files"></ul>
 
-  <footer>
+  <section>
+    <h2>Your files stay with you</h2>
+    <p>Everything happens in your browser, on your own computer. This site is
+    only a handful of files that your browser downloads once; there is no
+    server behind it for a PDF to be sent to.</p>
+    <p>You can check: once this page has loaded, turn off your Wi-Fi and drop
+    a PDF. It works the same. <span id="offline"></span></p>
+    <p>The page is also locked down so that your browser will refuse to let it
+    contact any other website.</p>
+  </section>
+
+  <section>
+    <h2>What it does</h2>
     <p>Law review articles and scanned book chapters often sit a small block of
     text in the middle of a big page. pdf2page measures where the ink is and
     trims the empty margins before placing pages side by side, so the text
     usually prints close to its original size.</p>
     <p>If trimming can't keep the text above 85% of its size, it says so
     instead: that file will read better printed normally.</p>
-  </footer>
+  </section>
 </main>
 <script type="module" src="./app.js"></script>
 </body>

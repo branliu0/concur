@@ -1,8 +1,9 @@
 // Assembles the web page into _site/: the page itself, core.js, and the two
-// libraries it imports, copied out of node_modules.  No bundler - the page
-// loads them as ES modules through the import map in index.html.
+// libraries it imports, copied out of node_modules.  No bundler - the imports
+// of those libraries by package name are just pointed at the copies.
 //
 //   npm run site && npx serve _site
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,6 +23,32 @@ for (const f of ['build/pdf.min.mjs', 'build/pdf.worker.min.mjs']) {
 }
 // fonts and decoders pdf.js fetches on demand while rendering
 for (const d of ['standard_fonts', 'cmaps', 'wasm', 'iccs']) cp(path.join(pdfjs, d), `vendor/pdfjs/${d}`);
+// the scripting sandbox for PDF forms, which nothing here uses
+for (const f of fs.readdirSync(path.join(site, 'vendor/pdfjs/wasm'))) {
+  if (f.startsWith('quickjs')) fs.rmSync(path.join(site, 'vendor/pdfjs/wasm', f));
+}
+
+// a browser cannot resolve a package name, so name the files
+const vendored = { '@cantoo/pdf-lib': './vendor/pdf-lib.mjs', 'pdfjs-dist': './vendor/pdfjs/pdf.min.mjs' };
+for (const f of ['core.js', 'app.js']) {
+  let js = fs.readFileSync(path.join(site, f), 'utf8');
+  for (const [name, file] of Object.entries(vendored)) js = js.replaceAll(`from '${name}'`, `from '${file}'`);
+  fs.writeFileSync(path.join(site, f), js);
+}
+
+// the service worker's list of everything to keep for offline use, and a
+// version that changes whenever any of it does
+const files = fs.readdirSync(site, { recursive: true, withFileTypes: true })
+  .filter((d) => d.isFile() && d.name !== 'sw.js')
+  .map((d) => path.relative(site, path.join(d.parentPath, d.name)).split(path.sep).join('/'))
+  .sort();
+const hash = crypto.createHash('sha256');
+for (const f of files) hash.update(f).update(fs.readFileSync(path.join(site, f)));
+const sw = fs.readFileSync(path.join(site, 'sw.js'), 'utf8')
+  .replace('__VERSION__', `pdf2page-${hash.digest('hex').slice(0, 12)}`)
+  .replace('__FILES__', JSON.stringify(['./', ...files.map((f) => `./${f}`)]));
+fs.writeFileSync(path.join(site, 'sw.js'), sw);
+
 // stop GitHub Pages running the site through Jekyll
 fs.writeFileSync(path.join(site, '.nojekyll'), '');
 console.log(`built ${path.relative(root, site)}/`);
