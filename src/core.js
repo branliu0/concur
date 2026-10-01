@@ -436,8 +436,8 @@ function formXObject(out, copier, page) {
 // canvas; both are only used when the margins are measured.  log(message)
 // receives each line of the report.
 //
-// Returns { scale, sheets, pdf }, where pdf is the new file's bytes (null on a
-// dry run).  Throws Pdf2pageError - with .skipped set when the file is fine but
+// Returns { scale, pages, sheets, pdf }: the source's page count, the number
+// of sheets they went onto, and the new file's bytes (null on a dry run).  Throws Pdf2pageError - with .skipped set when the file is fine but
 // would shrink below minScale.
 export async function pdf2page(bytes, options = {}, env = {}, log = () => {}) {
   const a = { ...DEFAULTS, ...options };
@@ -581,7 +581,7 @@ export async function pdf2page(bytes, options = {}, env = {}, log = () => {}) {
       + `(margins too small to reclaim; threshold ${pct(a.minScale)}). `
       + 'Use --force or lower --min-scale to override.', { skipped: true, scale });
   }
-  if (a.dryRun) return { scale, sheets: 0, pdf: null };
+  if (a.dryRun) return { scale, pages: pages.length, sheets: 0, pdf: null };
 
   // pair the pages up, giving each 1-up page a sheet of its own
   const plan = [];
@@ -629,5 +629,8 @@ export async function pdf2page(bytes, options = {}, env = {}, log = () => {}) {
   }
   // no object streams: they need PDF 1.5, and the oldest printer firmware
   // this has to get through is fussier than any viewer
-  return { scale, sheets: plan.length, pdf: await out.save({ useObjectStreams: false }) };
+  return {
+    scale, pages: pages.length, sheets: plan.length,
+    pdf: await out.save({ useObjectStreams: false }),
+  };
 }

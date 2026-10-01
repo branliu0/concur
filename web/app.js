@@ -57,14 +57,14 @@ function add(file) {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       // always make it: a file that comes out small gets a warning, not a refusal
-      const { scale, sheets, pdf } = await pdf2page(bytes, { ...options(), force: true }, env,
+      const { scale, pages, sheets, pdf } = await pdf2page(bytes, { ...options(), force: true }, env,
         (m) => lines.push(m));
       const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
       const name = file.name.replace(/\.pdf$/i, '') + '~2up.pdf';
       const small = scale < DEFAULTS.minScale;
       row.className = small ? 'small' : 'ok';
       status.textContent = `Text at ${pct(scale)} of its original size, on ${sheets} `
-        + `sheet${sheets === 1 ? '' : 's'}.`;
+        + `page${sheets === 1 ? '' : 's'} (was ${pages}).`;
       if (small) {
         status.append(el('div', { className: 'warning', textContent: 'Small print: this one has '
           + 'little margin to trim, and may read better printed normally.' }));
