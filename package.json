@@ -1,0 +1,15 @@
+{
+  "name": "pdf2page",
+  "version": "0.1.0",
+  "description": "Print a PDF 2-up, trimming dead margins so the text stays readable",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "pdf2page": "src/cli.js"
+  },
+  "dependencies": {
+    "@cantoo/pdf-lib": "^2.11.1",
+    "@napi-rs/canvas": "^1.0.9",
+    "pdfjs-dist": "^6.3.289"
+  }
+}
