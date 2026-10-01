@@ -31,6 +31,7 @@
     letter-spacing: -0.01em;
   }
   .lede { margin: 0 0 28px; color: var(--dim); }
+  .lede strong { display: block; color: var(--fg); font-weight: 600; }
   #drop {
     display: block; padding: 40px 20px; text-align: center; cursor: pointer;
     border: 1.5px dashed var(--line); border-radius: 10px; background: var(--card);
@@ -106,14 +107,17 @@
   section { margin-top: 36px; font-size: 14px; color: var(--dim); }
   section h2 { margin: 0 0 6px; font-size: 14px; color: var(--fg); }
   section p { margin: 0 0 8px; }
-  #offline.ready { color: var(--ok); }
+  section ul { margin: 0 0 8px; padding-left: 20px; }
+  section li { margin-bottom: 6px; }
+  section q { font-style: italic; }
   a { color: inherit; }
 </style>
 </head>
 <body>
 <main>
   <h1>concur</h1>
-  <p class="lede">Print a PDF two pages to a sheet by trimming away the wasted margins.</p>
+  <p class="lede">Print a PDF two pages to a sheet by trimming away the wasted margins.
+    <strong>Half the paper, with the text still easy to read.</strong></p>
 
   <label id="drop">
     <div class="picture" aria-hidden="true">
@@ -164,27 +168,56 @@
 
   <section>
     <h2>Your files stay with you</h2>
-    <p>Everything happens in your browser, on your own computer. This site is
-    only a handful of files that your browser downloads once; there is no
-    server behind it for a PDF to be sent to.</p>
+    <p>Everything happens in JavaScript, which runs in your browser, on your
+    own computer. Your PDFs are never uploaded or sent anywhere.</p>
     <p>You can check: once this page has loaded, turn off your Wi-Fi and drop
-    a PDF. It works the same. <span id="offline"></span></p>
-    <p>The page is also locked down so that your browser will refuse to let it
-    contact any other website.</p>
+    a PDF. It works the same.</p>
   </section>
 
   <section>
     <h2>What it does</h2>
-    <p>Law review articles and Supreme Court opinions have large margins
-    when printed on letter paper: the text was set for a much smaller page.
-    Printing two pages per sheet the usual way shrinks those margins along
-    with the text, so you get tiny print surrounded by blank paper.</p>
+    <p>Law review articles, Supreme Court opinions and book chapters have
+    large margins when printed on letter paper: the text was set for a much
+    smaller page. Printing two pages per sheet the usual way shrinks those
+    margins along with the text, so you get tiny print surrounded by blank
+    paper.</p>
     <p>This measures where the text actually is and trims the margins away
     before placing the pages side by side, so it usually prints close to its
-    original size on half the paper.</p>
+    original size, on half the paper.</p>
     <p>A document that already fills its page has little to trim. You still
     get the file, with a warning if the text comes out below 85% of its
     original size.</p>
+  </section>
+
+  <section>
+    <h2>Why &ldquo;concur&rdquo;?</h2>
+    <p>Today, to concur is mostly to agree, as in a concurring opinion. But
+    the word comes from the Latin <i>concurrere</i>, &ldquo;to run
+    together&rdquo; (<i>con-</i>, together, and <i>currere</i>, to run), and
+    for centuries that is what it meant in English: things concurred when they
+    came together, met at a point, or happened at once. <i>Concurrent</i> has
+    meant &ldquo;running together side by side&rdquo; since the late 1400s,
+    and the law still uses it that way when sentences run concurrently.</p>
+    <p>Which is what happens to your pages here. Some older uses:</p>
+    <ul>
+      <li>Hobbes, <a href="https://www.gutenberg.org/ebooks/3207" target="_blank" rel="noopener"><i>Leviathan</i></a>
+        (1651): <q>those, in whom want of means, contempt of honour, and
+        hardnesse of heart, concurred</q></li>
+      <li>Newton, <a href="https://www.gutenberg.org/ebooks/33504" target="_blank" rel="noopener"><i>Opticks</i></a>
+        (4th ed., 1730): <q>did not some other Cause concur with their Density
+        to make them opake</q></li>
+      <li><a href="https://webstersdictionary1828.com/Dictionary/concur" target="_blank" rel="noopener">Webster&rsquo;s
+        dictionary</a> (1828): <q>To meet in the same point</q></li>
+      <li>The <a href="https://www.etymonline.com/word/concur" target="_blank" rel="noopener">Online
+        Etymology Dictionary</a> on the word&rsquo;s history</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Need help, or have a suggestion?</h2>
+    <p>Email me at <a href="mailto:brandon.lu@nyu.edu">brandon.lu@nyu.edu</a>.</p>
+    <!-- TODO: point this at the GitHub repository once it exists -->
+    <p>concur is open source: <a id="source" href="#">the code is on GitHub</a>.</p>
   </section>
 </main>
 <script type="module" src="./app.js"></script>

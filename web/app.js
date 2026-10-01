@@ -118,10 +118,4 @@ addEventListener('drop', (e) => {
 // The service worker keeps a copy of the whole site, so the page goes on
 // working with no connection at all - which is also the plainest proof that
 // nothing is being sent anywhere.
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(() => {});
-  navigator.serviceWorker.ready.then(() => {
-    $('offline').textContent = '\u2713 Saved on this computer and ready to use offline.';
-    $('offline').className = 'ready';
-  });
-}
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
