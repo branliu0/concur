@@ -106,3 +106,25 @@ wrapper expects `pdf2page` at `~/bin/pdf2page` and looks for uv in
 
 Progress and measurements go to stderr, and the output path goes to stdout.
 The exit status is 1 when a file is skipped or fails.
+
+## JavaScript rewrite (in progress)
+
+`src/` holds a port to JavaScript, meant to replace the Python script: the same
+logic runs on the command line and in a web page, with no poppler.
+
+```
+npm install
+node src/cli.js brief.pdf     # same options as above
+npm test                      # dry-runs your own PDFs in samples/ (see test/samples.js)
+npm run site                  # builds the web page into _site/
+```
+
+pdf.js does the measuring in place of poppler and pdf-lib the layout in place
+of pypdf. The two renderers antialias differently, so measured trims come out
+a point or two apart; every decision — stamps, cover pages, 1-up pages,
+skips — comes out the same.
+
+The web page (`web/`) runs entirely in the browser: files are never uploaded,
+it keeps working offline once loaded, and its Content-Security-Policy stops it
+contacting any other site. `.github/workflows/pages.yml` builds and publishes
+it to GitHub Pages on every push to `main`.
