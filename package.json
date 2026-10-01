@@ -7,6 +7,9 @@
   "bin": {
     "pdf2page": "src/cli.js"
   },
+  "scripts": {
+    "test": "node test/samples.js"
+  },
   "dependencies": {
     "@cantoo/pdf-lib": "^2.11.1",
     "@napi-rs/canvas": "^1.0.9",
