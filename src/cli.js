@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-// pdf2page brief.pdf   ->   brief~2up.pdf, next to the original
+// concur brief.pdf   ->   brief~2up.pdf, next to the original
 //
 // The report goes to stderr and the output path to stdout; the exit status is
 // 1 when a file is skipped or fails.
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { DEFAULTS, Pdf2pageError, pdf2page } from './core.js';
+import { DEFAULTS, ConcurError, concur } from './core.js';
 import { env } from './node-env.js';
 
-const USAGE = `usage: pdf2page [options] input.pdf [output.pdf]
+const USAGE = `usage: concur [options] input.pdf [output.pdf]
 
 Print a PDF 2-up with margins trimmed.
 
@@ -33,7 +33,7 @@ Print a PDF 2-up with margins trimmed.
       --dpi N          resolution to measure at (default 50)
   -h, --help`;
 
-const die = (msg) => { console.error(`pdf2page: ${msg}`); process.exit(1); };
+const die = (msg) => { console.error(`concur: ${msg}`); process.exit(1); };
 
 let args;
 try {
@@ -105,7 +105,7 @@ try {
 }
 
 try {
-  const { pdf } = await pdf2page(bytes, options, env, (m) => console.error(`pdf2page: ${m}`));
+  const { pdf } = await concur(bytes, options, env, (m) => console.error(`concur: ${m}`));
   if (pdf) {
     try {
       fs.writeFileSync(out, pdf);
@@ -115,7 +115,7 @@ try {
     console.log(out);
   }
 } catch (e) {
-  if (!(e instanceof Pdf2pageError)) throw e;
+  if (!(e instanceof ConcurError)) throw e;
   die(e.skipped ? e.message : `${src}: ${e.message}`);
 }
 // pdf.js keeps a worker alive that would otherwise hold the process open

@@ -1,4 +1,4 @@
-// pdf2page - print a PDF 2-up, trimming dead margins so the text stays readable.
+// concur - print a PDF 2-up, trimming dead margins so the text stays readable.
 //
 // This is the whole of the logic, and it runs unchanged in Node and in a
 // browser: bytes in, bytes out.  The two things that differ between them - how
@@ -55,7 +55,7 @@ const COVERS = [
 
 // A file that was read fine but is not worth 2-upping (`skipped`), or one that
 // could not be processed at all.
-export class Pdf2pageError extends Error {
+export class ConcurError extends Error {
   constructor(message, { skipped = false, scale = null } = {}) {
     super(message);
     this.skipped = skipped;
@@ -410,7 +410,7 @@ function decodeContents(contents) {
   for (const s of streams) {
     if (s instanceof PDFRawStream) parts.push(decodePDFRawStream(s).decode());
     else if (s instanceof PDFContentStream) parts.push(s.getUnencodedContents());
-    else throw new Pdf2pageError('a page has contents of a kind that cannot be read');
+    else throw new ConcurError('a page has contents of a kind that cannot be read');
     parts.push(Uint8Array.of(10));
   }
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
@@ -454,9 +454,9 @@ function formXObject(out, copier, page) {
 //
 // Returns { scale, pages, sheets, cover, pdf }: the source's page count, the
 // number of sheets they went onto, whose cover page was left out (or null),
-// and the new file's bytes (null on a dry run).  Throws Pdf2pageError - with
+// and the new file's bytes (null on a dry run).  Throws ConcurError - with
 // .skipped set when the file is fine but would shrink below minScale.
-export async function pdf2page(bytes, options = {}, env = {}, log = () => {}) {
+export async function concur(bytes, options = {}, env = {}, log = () => {}) {
   let doc = null;
   // pdf.js takes ownership of the buffer it is given, so it gets a copy
   const pdfjsDoc = async () => (doc ??= await env.openPdfjs(bytes.slice()));
@@ -470,7 +470,7 @@ export async function pdf2page(bytes, options = {}, env = {}, log = () => {}) {
 async function run(bytes, a, pdfjsDoc, env, log) {
   const paper = String(a.paper).toLowerCase().replace(/paper$/, '');
   if (!PAPER[paper]) {
-    throw new Pdf2pageError(`unknown --paper ${a.paper}; choose from ${Object.keys(PAPER).join(', ')}`);
+    throw new ConcurError(`unknown --paper ${a.paper}; choose from ${Object.keys(PAPER).join(', ')}`);
   }
   const [SW, SH] = PAPER[paper];
 
@@ -485,9 +485,9 @@ async function run(bytes, a, pdfjsDoc, env, log) {
       return pg.getRotation().angle % 180 === 0 ? [width, height] : [height, width];
     });
   } catch (e) {
-    throw new Pdf2pageError(`could not read it as a PDF (${e.message})`);
+    throw new ConcurError(`could not read it as a PDF (${e.message})`);
   }
-  if (!pages.length) throw new Pdf2pageError('it has no pages');
+  if (!pages.length) throw new ConcurError('it has no pages');
 
   // A JSTOR or HeinOnline download leads with a page about the download
   // itself: the citation, the terms of use.  Nobody prints an article to read
@@ -530,7 +530,7 @@ async function run(bytes, a, pdfjsDoc, env, log) {
     const v = (Array.isArray(a.trim) ? a.trim : String(a.trim).replace(/,/g, ' ').trim().split(/\s+/))
       .map(Number);
     if (![4, 8].includes(v.length) || v.some(Number.isNaN)) {
-      throw new Pdf2pageError('--trim wants four numbers "L B R T" in points, '
+      throw new ConcurError('--trim wants four numbers "L B R T" in points, '
         + 'or eight (odd pages, then even)');
     }
     marg = { 1: v.slice(0, 4), 0: v.length === 8 ? v.slice(4) : v.slice(0, 4) };
@@ -584,7 +584,7 @@ async function run(bytes, a, pdfjsDoc, env, log) {
   } else if (PRESETS[a.preset]) {
     marg = { 1: PRESETS[a.preset], 0: PRESETS[a.preset] };
   } else {
-    throw new Pdf2pageError(`unknown --preset ${a.preset}; choose from auto, booklet, full, none`);
+    throw new ConcurError(`unknown --preset ${a.preset}; choose from auto, booklet, full, none`);
   }
 
   // never trim past the content, and never trim negative
@@ -607,7 +607,7 @@ async function run(bytes, a, pdfjsDoc, env, log) {
     else t = trim[(i + 1) % 2];
     const b = [t[0], t[1], W - t[2], H - t[3]];
     if (b[2] - b[0] < 1 || b[3] - b[1] < 1) {
-      throw new Pdf2pageError(`trim leaves nothing of page ${i + 1}`);
+      throw new ConcurError(`trim leaves nothing of page ${i + 1}`);
     }
     return b;
   };
@@ -617,7 +617,7 @@ async function run(bytes, a, pdfjsDoc, env, log) {
   const scale = paired.length ? Math.min(...paired.slice(0, 2).map((i) => fit(box(i)))) : 1.0;
   log(`text ends at ~${pct(scale)} of original size`);
   if (scale < a.minScale && !a.force) {
-    throw new Pdf2pageError(`skipping - only ${pct(scale)} of original size `
+    throw new ConcurError(`skipping - only ${pct(scale)} of original size `
       + `(margins too small to reclaim; threshold ${pct(a.minScale)}). `
       + 'Use --force or lower --min-scale to override.', { skipped: true, scale });
   }

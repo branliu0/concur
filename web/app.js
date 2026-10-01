@@ -1,6 +1,6 @@
 // The web page: runs core.js on dropped files, entirely in the browser.
 import * as pdfjs from 'pdfjs-dist';
-import { DEFAULTS, Pdf2pageError, pdf2page } from './core.js';
+import { DEFAULTS, ConcurError, concur } from './core.js';
 
 const vendor = new URL('./vendor/pdfjs/', import.meta.url).href;
 pdfjs.GlobalWorkerOptions.workerSrc = vendor + 'pdf.worker.min.mjs';
@@ -59,7 +59,7 @@ function add(file) {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       // always make it: a file that comes out small gets a warning, not a refusal
-      const { scale, pages, sheets, cover, pdf } = await pdf2page(bytes,
+      const { scale, pages, sheets, cover, pdf } = await concur(bytes,
         { ...options(), ...override, force: true }, env, (m) => lines.push(m));
       const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
       const name = file.name.replace(/\.pdf$/i, '') + '~2up.pdf';
@@ -85,10 +85,10 @@ function add(file) {
       }
     } catch (e) {
       row.className = 'failed';
-      status.textContent = e instanceof Pdf2pageError
+      status.textContent = e instanceof ConcurError
         ? `Couldn't process this file: ${e.message}.`
         : `Something went wrong: ${e.message}`;
-      if (!(e instanceof Pdf2pageError)) console.error(e);
+      if (!(e instanceof ConcurError)) console.error(e);
     }
     // the report is written for the command line; drop its hints about flags
     log.textContent = lines.map((l) => l.replace(/ \((--[^)]*)\)|; --[^)]*(?=\))/g, '')).join('\n');

@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pdf2page } from '../src/core.js';
+import { concur } from '../src/core.js';
 import { env } from '../src/node-env.js';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -29,7 +29,7 @@ for (const d of ['standard_fonts', 'cmaps', 'wasm', 'iccs']) cp(path.join(pdfjs,
 const examples = path.join(site, 'examples');
 for (const f of fs.existsSync(examples) ? fs.readdirSync(examples) : []) {
   if (!f.endsWith('.pdf')) continue;
-  const { pdf } = await pdf2page(new Uint8Array(fs.readFileSync(path.join(examples, f))), {}, env);
+  const { pdf } = await concur(new Uint8Array(fs.readFileSync(path.join(examples, f))), {}, env);
   fs.writeFileSync(path.join(examples, f.replace(/\.pdf$/, '-2up.pdf')), pdf);
 }
 
@@ -57,7 +57,7 @@ const files = fs.readdirSync(site, { recursive: true, withFileTypes: true })
 const hash = crypto.createHash('sha256');
 for (const f of files) hash.update(f).update(fs.readFileSync(path.join(site, f)));
 const sw = fs.readFileSync(path.join(site, 'sw.js'), 'utf8')
-  .replace('__VERSION__', `pdf2page-${hash.digest('hex').slice(0, 12)}`)
+  .replace('__VERSION__', `concur-${hash.digest('hex').slice(0, 12)}`)
   .replace('__FILES__', JSON.stringify(['./', ...files.map((f) => `./${f}`)]));
 fs.writeFileSync(path.join(site, 'sw.js'), sw);
 

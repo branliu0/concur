@@ -1,50 +1,45 @@
-# pdf2page
+# concur
 
-Print a PDF 2-up (two pages side by side on one landscape sheet) without the
-text shrinking to nothing, by trimming away the empty margins first.
+Print a PDF two pages to a sheet by trimming away the wasted margins.
 
-Law review articles, briefs, and scanned book chapters often sit a small block
-of text in the middle of a big page. Put two of those pages side by side on one
-sheet as they are and the text ends up tiny. `pdf2page` measures where the ink
-actually is and crops to it before laying the pages out, so a booklet-format
-brief usually prints 2-up at close to its original size.
+Law review articles and Supreme Court opinions have large margins when printed
+on letter paper: the text was set for a much smaller page. Printing two pages
+per sheet the usual way shrinks those margins along with the text, so you get
+tiny print surrounded by blank paper. concur measures where the text actually
+is and crops to it before laying the pages out side by side, so it usually
+prints close to its original size on half the paper.
+
+(To concur is, literally, to run together.)
+
+## The web page
+
+`web/` is a page that does all of this in the browser: drop PDFs on it and
+download the results. Files are never uploaded, it keeps working offline once
+loaded, and its Content-Security-Policy stops it contacting any other site.
 
 ```
-pdf2page brief.pdf        # -> brief~2up.pdf, next to the original
+npm install
+npm run site                  # builds the page into _site/
+```
+
+`.github/workflows/pages.yml` builds and publishes it to GitHub Pages on every
+push to `main`.
+
+## The command line
+
+Needs [Node](https://nodejs.org/).
+
+```
+npm install
+node src/cli.js brief.pdf     # -> brief~2up.pdf, next to the original
 ```
 
 The `~` in the output name makes it sort right after the source in Finder.
+The page and the command line run the same code, `src/core.js`: pdf.js renders
+the pages and reads their text, pdf-lib does the layout.
 
-## Install
-
-Needs macOS or Linux with:
-
-- [uv](https://docs.astral.sh/uv/), which runs the script and fetches its
-  Python dependencies (pypdf, Pillow, numpy) on first use
-- poppler's `pdftoppm`, used to measure the margins: `brew install poppler`
-
-Then put `pdf2page` somewhere on your `PATH`, e.g.
-
-```
-ln -s ~/dev/pdf2page/pdf2page ~/bin/pdf2page
-```
-
-### Finder Quick Action (macOS)
-
-Right-click one or more PDFs → **Quick Actions → pdf2page 2-up**.
-
-1. Symlink the wrapper next to `pdf2page`:
-   `ln -s ~/dev/pdf2page/pdf2page-quickaction ~/bin/pdf2page-quickaction`
-2. Copy the workflow into place:
-   `cp -R "pdf2page 2-up.workflow" ~/Library/Services/`
-3. Turn it on in **System Settings → General → Login Items & Extensions →
-   Finder** (it won't show in the menu until you do).
-
-Every run ends in a dialog. **Open** opens the result, and when a file was
-skipped for being too small, **Make anyway** redoes it with `--force`. The
-wrapper expects `pdf2page` at `~/bin/pdf2page` and looks for uv in
-`~/.local/bin` and poppler in `/opt/homebrew/bin`; edit
-`pdf2page-quickaction` if yours live elsewhere.
+`npm test` dry-runs your own PDFs in `samples/` against a recorded report, to
+show whether a change moved anything; see `test/samples.js`.
 
 ## How it decides
 
@@ -55,7 +50,7 @@ wrapper expects `pdf2page` at `~/bin/pdf2page` and looks for uv in
    and right-hand pages.
 2. **Ignore download stamps.** Publishers stamp every page — JSTOR's "This
    content downloaded from …" under the text block, OUP's down the side,
-   Cambridge Core's across the foot, HeinOnline's, SSRN's. pdf2page reads the
+   Cambridge Core's across the foot, HeinOnline's, SSRN's. concur reads the
    extracted text and drops the lines that match (see `STAMPS` in the script),
    taking the whole block with them, since JSTOR's middle line is a bare IP
    address and date. Reading the words is what makes this safe: JSTOR's footer
@@ -67,10 +62,10 @@ wrapper expects `pdf2page` at `~/bin/pdf2page` and looks for uv in
    *wider* than the text block, so running heads and page numbers are never
    clipped. `--keep-edges` turns both off.
 3. **Set aside pages unlike the rest.** JSTOR and HeinOnline downloads lead
-   with a cover page, often a different size and nearly full of text. Pages
-   whose size differs from the document's usual one are left out of the
-   measurement, placed untrimmed, and not allowed to set the scale for
-   everything else.
+   with a cover page about the download itself. Page 1 is recognised as one by
+   what it says, and left out (`--keep-cover` keeps it). Any other page whose
+   size differs from the document's usual one is left out of the measurement,
+   placed untrimmed, and not allowed to set the scale for everything else.
 
    A page can also differ in its content rather than its size: journal front
    matter (an abstract, a table of contents) often runs the full width of the
@@ -93,6 +88,7 @@ wrapper expects `pdf2page` at `~/bin/pdf2page` and looks for uv in
 | `-p, --preset` | `auto` | `auto` measures; `booklet` / `full` use fixed margins; `none` doesn't trim |
 | `--trim "L B R T"` | | Set content margins yourself, in points. Eight numbers set odd pages, then even. Handy for cutting a stamp under the text, like JSTOR's |
 | `--keep-edges` | | Treat download stamps as content instead of ignoring them |
+| `--keep-cover` | | Keep the cover page JSTOR and HeinOnline put in front |
 | `-m, --margin` | `10` | Whitespace kept around the content, pt |
 | `-s, --scale` | `0.90` | Fraction of the sheet used, leaving a printable border |
 | `--gutter` | `36` | Gap between the two pages, pt |
@@ -107,28 +103,34 @@ wrapper expects `pdf2page` at `~/bin/pdf2page` and looks for uv in
 Progress and measurements go to stderr, and the output path goes to stdout.
 The exit status is 1 when a file is skipped or fails.
 
-## JavaScript rewrite (in progress)
+## pdf2page, the Python original
 
-`src/` holds a port to JavaScript, meant to replace the Python script: the same
-logic runs on the command line and in a web page, with no poppler.
+concur began as `pdf2page`, a single Python script that is still here. It
+takes the same options and makes the same decisions, except that it places a
+cover page untrimmed where concur leaves it out, and its measured trims come
+out a point or two apart, because poppler and pdf.js antialias differently.
+
+It needs [uv](https://docs.astral.sh/uv/), which fetches its Python
+dependencies on first use, and poppler (`brew install poppler`). Put it
+somewhere on your `PATH`:
 
 ```
-npm install
-node src/cli.js brief.pdf     # same options as above
-npm test                      # dry-runs your own PDFs in samples/ (see test/samples.js)
-npm run site                  # builds the web page into _site/
+ln -s ~/dev/pdf2page/pdf2page ~/bin/pdf2page
 ```
 
-pdf.js does the measuring in place of poppler and pdf-lib the layout in place
-of pypdf. The two renderers antialias differently, so measured trims come out
-a point or two apart; every decision — stamps, 1-up pages, skips — comes out
-the same.
+### Finder Quick Action (macOS)
 
-One thing the JavaScript does that the Python does not: it recognises the
-cover page JSTOR and HeinOnline put in front of a download, by its text, and
-leaves it out (`--keep-cover` keeps it).
+Right-click one or more PDFs → **Quick Actions → pdf2page 2-up**.
 
-The web page (`web/`) runs entirely in the browser: files are never uploaded,
-it keeps working offline once loaded, and its Content-Security-Policy stops it
-contacting any other site. `.github/workflows/pages.yml` builds and publishes
-it to GitHub Pages on every push to `main`.
+1. Symlink the wrapper next to `pdf2page`:
+   `ln -s ~/dev/pdf2page/pdf2page-quickaction ~/bin/pdf2page-quickaction`
+2. Copy the workflow into place:
+   `cp -R "pdf2page 2-up.workflow" ~/Library/Services/`
+3. Turn it on in **System Settings → General → Login Items & Extensions →
+   Finder** (it won't show in the menu until you do).
+
+Every run ends in a dialog. **Open** opens the result, and when a file was
+skipped for being too small, **Make anyway** redoes it with `--force`. The
+wrapper expects `pdf2page` at `~/bin/pdf2page` and looks for uv in
+`~/.local/bin` and poppler in `/opt/homebrew/bin`; edit
+`pdf2page-quickaction` if yours live elsewhere.
