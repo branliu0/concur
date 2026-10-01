@@ -68,6 +68,7 @@
     display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
     margin: 18px 2px 0; font-size: 14px; color: var(--dim);
   }
+  .examples + .examples { margin-top: 8px; }
   .examples b { color: var(--fg); font-weight: 600; }
   .examples .what { flex: 1 1 240px; }
   #files { list-style: none; margin: 28px 0 0; padding: 0; display: grid; gap: 10px; }
@@ -83,6 +84,10 @@
     background: color-mix(in srgb, var(--warn) 14%, var(--card));
   }
   .warning { margin-top: 4px; color: var(--warn); font-weight: 600; }
+  .note { margin-top: 4px; color: var(--dim); }
+  button.link {
+    padding: 0; border: 0; color: inherit; text-decoration: underline; font-size: inherit;
+  }
   .warning::before { content: "\26A0\FE0E  "; }
   li.failed .status { color: var(--accent); }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
@@ -132,6 +137,8 @@
           <option value="a4">A4</option>
         </select>
       </label>
+      <label><input type="checkbox" id="cover" checked>
+        Leave out the cover page that JSTOR and HeinOnline add</label>
       <label><input type="checkbox" id="stamps" checked>
         Ignore download stamps (JSTOR, HeinOnline, Oxford, Cambridge, SSRN)</label>
       <label><input type="checkbox" id="oversize" checked>

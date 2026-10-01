@@ -29,6 +29,7 @@ const pct = (x) => `${Math.round(x * 100)}%`;
 const options = () => ({
   paper: $('paper').value,
   keepEdges: !$('stamps').checked,
+  keepCover: !$('cover').checked,
   oversize: $('oversize').checked ? '1up' : '2up',
   frame: $('frame').checked,
 });
@@ -47,7 +48,8 @@ function add(file) {
     status, actions, details);
   $('files').prepend(row);
 
-  enqueue(async () => {
+  // `override` changes the options for this file alone, when it is run again
+  const run = (override = {}) => enqueue(async () => {
     row.className = '';
     status.textContent = 'Working…';
     actions.replaceChildren();
@@ -57,8 +59,8 @@ function add(file) {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       // always make it: a file that comes out small gets a warning, not a refusal
-      const { scale, pages, sheets, pdf } = await pdf2page(bytes, { ...options(), force: true }, env,
-        (m) => lines.push(m));
+      const { scale, pages, sheets, cover, pdf } = await pdf2page(bytes,
+        { ...options(), ...override, force: true }, env, (m) => lines.push(m));
       const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
       const name = file.name.replace(/\.pdf$/i, '') + '~2up.pdf';
       const small = scale < DEFAULTS.minScale;
@@ -73,6 +75,14 @@ function add(file) {
         el('a', { className: 'button primary', href: url, download: name, textContent: 'Download' }),
         el('a', { className: 'button', href: url, target: '_blank', textContent: 'Open' }),
       );
+      // leaving a page out is the one thing here that could surprise someone,
+      // so it is said on the file itself, with the way back beside it
+      if (cover) {
+        status.append(el('div', { className: 'note' },
+          `Left out page 1, the ${cover} cover page. `,
+          el('button', { className: 'link', textContent: 'Put it back',
+            onclick: () => run({ keepCover: true }) })));
+      }
     } catch (e) {
       row.className = 'failed';
       status.textContent = e instanceof Pdf2pageError
@@ -84,6 +94,7 @@ function add(file) {
     log.textContent = lines.map((l) => l.replace(/ \((--[^)]*)\)|; --[^)]*(?=\))/g, '')).join('\n');
     details.hidden = !lines.length;
   });
+  run();
 }
 
 const addAll = (files) => {
