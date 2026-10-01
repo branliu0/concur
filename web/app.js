@@ -1,6 +1,6 @@
 // The web page: runs core.js on dropped files, entirely in the browser.
 import * as pdfjs from 'pdfjs-dist';
-import { Pdf2pageError, pdf2page } from './core.js';
+import { DEFAULTS, Pdf2pageError, pdf2page } from './core.js';
 
 const vendor = new URL('./vendor/pdfjs/', import.meta.url).href;
 pdfjs.GlobalWorkerOptions.workerSrc = vendor + 'pdf.worker.min.mjs';
@@ -47,7 +47,7 @@ function add(file) {
     status, actions, details);
   $('files').prepend(row);
 
-  const run = (force) => enqueue(async () => {
+  enqueue(async () => {
     row.className = '';
     status.textContent = 'Working…';
     actions.replaceChildren();
@@ -56,36 +56,34 @@ function add(file) {
     await new Promise((r) => requestAnimationFrame(() => setTimeout(r)));
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
-      const { scale, sheets, pdf } = await pdf2page(bytes, { ...options(), force }, env,
+      // always make it: a file that comes out small gets a warning, not a refusal
+      const { scale, sheets, pdf } = await pdf2page(bytes, { ...options(), force: true }, env,
         (m) => lines.push(m));
       const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
       const name = file.name.replace(/\.pdf$/i, '') + '~2up.pdf';
-      row.className = 'ok';
+      const small = scale < DEFAULTS.minScale;
+      row.className = small ? 'small' : 'ok';
       status.textContent = `Text at ${pct(scale)} of its original size, on ${sheets} `
         + `sheet${sheets === 1 ? '' : 's'}.`;
+      if (small) {
+        status.append(el('div', { className: 'warning', textContent: 'Small print: this one has '
+          + 'little margin to trim, and may read better printed normally.' }));
+      }
       actions.append(
         el('a', { className: 'button primary', href: url, download: name, textContent: 'Download' }),
         el('a', { className: 'button', href: url, target: '_blank', textContent: 'Open' }),
       );
     } catch (e) {
-      if (e instanceof Pdf2pageError && e.skipped) {
-        row.className = 'skipped';
-        status.textContent = `Not worth it: the text would shrink to ${pct(e.scale)}. `
-          + 'This one will read better printed normally.';
-        actions.append(el('button', { textContent: 'Make it anyway', onclick: () => run(true) }));
-      } else {
-        row.className = 'failed';
-        status.textContent = e instanceof Pdf2pageError
-          ? `Couldn't process this file: ${e.message}.`
-          : `Something went wrong: ${e.message}`;
-        if (!(e instanceof Pdf2pageError)) console.error(e);
-      }
+      row.className = 'failed';
+      status.textContent = e instanceof Pdf2pageError
+        ? `Couldn't process this file: ${e.message}.`
+        : `Something went wrong: ${e.message}`;
+      if (!(e instanceof Pdf2pageError)) console.error(e);
     }
     // the report is written for the command line; drop its hints about flags
     log.textContent = lines.map((l) => l.replace(/ \((--[^)]*)\)|; --[^)]*(?=\))/g, '')).join('\n');
     details.hidden = !lines.length;
   });
-  run(false);
 }
 
 const addAll = (files) => {

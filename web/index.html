@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>pdf2page</title>
-<meta name="description" content="Print a PDF two pages to a sheet without the text shrinking to nothing.">
+<meta name="description" content="Print a PDF two pages to a sheet by trimming away the wasted margins.">
 <!-- The browser enforces this: the page may only load its own files and may
      not send anything to any other site. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self'; object-src 'self' blob:; frame-src 'self' blob:; form-action 'none'; base-uri 'none'">
@@ -72,7 +72,9 @@
   .name { font-weight: 600; overflow-wrap: anywhere; }
   .status { margin-top: 2px; font-size: 14px; color: var(--dim); }
   li.ok .status { color: var(--ok); }
-  li.skipped .status { color: var(--warn); }
+  #files li.small { border-color: var(--warn); }
+  .warning { margin-top: 4px; color: var(--warn); font-weight: 600; }
+  .warning::before { content: "\26A0\FE0E  "; }
   li.failed .status { color: var(--accent); }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .actions:empty { display: none; }
@@ -97,7 +99,7 @@
 <body>
 <main>
   <h1>pdf2page</h1>
-  <p class="lede">Print a PDF two pages to a sheet, without the text shrinking to nothing.</p>
+  <p class="lede">Print a PDF two pages to a sheet by trimming away the wasted margins.</p>
 
   <label id="drop">
     <div class="picture" aria-hidden="true">
@@ -144,12 +146,16 @@
 
   <section>
     <h2>What it does</h2>
-    <p>Law review articles and scanned book chapters often sit a small block of
-    text in the middle of a big page. pdf2page measures where the ink is and
-    trims the empty margins before placing pages side by side, so the text
-    usually prints close to its original size.</p>
-    <p>If trimming can't keep the text above 85% of its size, it says so
-    instead: that file will read better printed normally.</p>
+    <p>Law review articles and Supreme Court opinions have large margins
+    when printed on letter paper: the text was set for a much smaller page.
+    Put two of those pages on one sheet as they are, and most of the sheet is
+    still margin while the text is tiny.</p>
+    <p>This measures where the text actually is and trims the margins away
+    before placing the pages side by side, so it usually prints close to its
+    original size on half the paper.</p>
+    <p>A document that already fills its page has little to trim. You still
+    get the file, with a warning if the text comes out below 85% of its
+    original size.</p>
   </section>
 </main>
 <script type="module" src="./app.js"></script>
