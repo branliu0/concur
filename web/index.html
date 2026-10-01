@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pdf2page</title>
+<meta name="description" content="Print a PDF two pages to a sheet without the text shrinking to nothing.">
+<script type="importmap">
+{ "imports": {
+    "@cantoo/pdf-lib": "./vendor/pdf-lib.mjs",
+    "pdfjs-dist": "./vendor/pdfjs/pdf.min.mjs"
+} }
+</script>
+<style>
+  :root {
+    --bg: #faf8f4; --fg: #22201c; --dim: #6f6a60; --line: #dcd6c9;
+    --card: #fff; --accent: #8a2c1d; --ok: #2f6b3a; --warn: #8a5a00;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1917; --fg: #ebe7df; --dim: #a19b8f; --line: #3a3833;
+      --card: #24231f; --accent: #e08a78; --ok: #86c592; --warn: #e0b65c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 48px 20px 64px; background: var(--bg); color: var(--fg);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 {
+    margin: 0 0 4px; font: 600 34px/1.1 "Iowan Old Style", Palatino, Georgia, serif;
+    letter-spacing: -0.01em;
+  }
+  .lede { margin: 0 0 28px; color: var(--dim); }
+  #drop {
+    display: block; padding: 40px 20px; text-align: center; cursor: pointer;
+    border: 1.5px dashed var(--line); border-radius: 10px; background: var(--card);
+    transition: border-color .15s, background .15s;
+  }
+  #drop:hover, #drop.over, #drop:focus-within { border-color: var(--accent); }
+  #drop.over { background: color-mix(in srgb, var(--accent) 7%, var(--card)); }
+  #drop strong { display: block; font-size: 17px; }
+  #drop span { color: var(--dim); font-size: 14px; }
+  #drop input { position: absolute; opacity: 0; pointer-events: none; }
+  /* two pages side by side on a sheet, drawn in CSS */
+  .sheet {
+    width: 66px; height: 51px; margin: 0 auto 14px; padding: 6px; display: flex; gap: 5px;
+    border: 1.5px solid var(--dim); border-radius: 3px;
+  }
+  .sheet i {
+    flex: 1; border-radius: 1px;
+    background: repeating-linear-gradient(var(--dim) 0 1.5px, transparent 1.5px 5px);
+    opacity: .55;
+  }
+  details.options { margin: 14px 2px 0; font-size: 14px; color: var(--dim); }
+  details.options summary { cursor: pointer; width: fit-content; }
+  details.options .grid { display: grid; gap: 8px; padding: 12px 0 0 2px; color: var(--fg); }
+  details.options label { display: flex; gap: 8px; align-items: center; }
+  select { font: inherit; }
+  #files { list-style: none; margin: 28px 0 0; padding: 0; display: grid; gap: 10px; }
+  #files li {
+    padding: 14px 16px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .name { font-weight: 600; overflow-wrap: anywhere; }
+  .status { margin-top: 2px; font-size: 14px; color: var(--dim); }
+  li.ok .status { color: var(--ok); }
+  li.skipped .status { color: var(--warn); }
+  li.failed .status { color: var(--accent); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .actions:empty { display: none; }
+  button, a.button {
+    font: inherit; font-size: 14px; padding: 5px 13px; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--line); background: transparent; color: var(--fg);
+    text-decoration: none;
+  }
+  button.primary, a.button.primary {
+    background: var(--fg); color: var(--bg); border-color: var(--fg);
+  }
+  li details { margin-top: 10px; font-size: 13px; color: var(--dim); }
+  li details summary { cursor: pointer; width: fit-content; }
+  li pre { margin: 6px 0 0; white-space: pre-wrap; font: 12px/1.5 ui-monospace, Menlo, monospace; }
+  footer { margin-top: 36px; font-size: 14px; color: var(--dim); }
+  footer p { margin: 0 0 8px; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1>pdf2page</h1>
+  <p class="lede">Print a PDF two pages to a sheet, without the text shrinking to nothing.</p>
+
+  <label id="drop">
+    <div class="sheet" aria-hidden="true"><i></i><i></i></div>
+    <strong>Drop PDFs here, or click to choose</strong>
+    <span>They stay on your computer. Nothing is uploaded.</span>
+    <input id="pick" type="file" accept="application/pdf,.pdf" multiple>
+  </label>
+
+  <details class="options">
+    <summary>Options</summary>
+    <div class="grid">
+      <label>Paper
+        <select id="paper">
+          <option value="letter">Letter</option>
+          <option value="legal">Legal</option>
+          <option value="a4">A4</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="stamps" checked>
+        Ignore download stamps (JSTOR, HeinOnline, Oxford, Cambridge, SSRN)</label>
+      <label><input type="checkbox" id="oversize" checked>
+        Give pages with a much wider text block a sheet of their own</label>
+      <label><input type="checkbox" id="frame"> Draw a box around each page</label>
+    </div>
+  </details>
+
+  <ul id="files"></ul>
+
+  <footer>
+    <p>Law review articles and scanned book chapters often sit a small block of
+    text in the middle of a big page. pdf2page measures where the ink is and
+    trims the empty margins before placing pages side by side, so the text
+    usually prints close to its original size.</p>
+    <p>If trimming can't keep the text above 85% of its size, it says so
+    instead: that file will read better printed normally.</p>
+  </footer>
+</main>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

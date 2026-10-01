@@ -8,7 +8,8 @@
     "pdf2page": "src/cli.js"
   },
   "scripts": {
-    "test": "node test/samples.js"
+    "test": "node test/samples.js",
+    "site": "node scripts/build-site.js"
   },
   "dependencies": {
     "@cantoo/pdf-lib": "^2.11.1",
