@@ -121,8 +121,12 @@ npm run site                  # builds the web page into _site/
 
 pdf.js does the measuring in place of poppler and pdf-lib the layout in place
 of pypdf. The two renderers antialias differently, so measured trims come out
-a point or two apart; every decision — stamps, cover pages, 1-up pages,
-skips — comes out the same.
+a point or two apart; every decision — stamps, 1-up pages, skips — comes out
+the same.
+
+One thing the JavaScript does that the Python does not: it recognises the
+cover page JSTOR and HeinOnline put in front of a download, by its text, and
+leaves it out (`--keep-cover` keeps it).
 
 The web page (`web/`) runs entirely in the browser: files are never uploaded,
 it keeps working offline once loaded, and its Content-Security-Policy stops it

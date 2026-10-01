@@ -17,6 +17,7 @@ Print a PDF 2-up with margins trimmed.
       --trim "L B R T" content margins in pt, overriding the measurement;
                        eight numbers set odd pages, then even
       --keep-edges     count download stamps as content instead of ignoring them
+      --keep-cover     keep the cover page JSTOR and HeinOnline put in front
   -m, --margin PT      whitespace to keep around the content (default 10)
   -s, --scale F        fraction of the sheet to use (default 0.90)
       --gutter PT      gap between the two pages (default 36)
@@ -53,6 +54,7 @@ try {
       dpi: { type: 'string' },
       oversize: { type: 'string' },
       'keep-edges': { type: 'boolean' },
+      'keep-cover': { type: 'boolean' },
       trim: { type: 'string' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -87,6 +89,7 @@ const options = {
   dpi: num('dpi', DEFAULTS.dpi),
   oversize: v.oversize ?? DEFAULTS.oversize,
   keepEdges: !!v['keep-edges'],
+  keepCover: !!v['keep-cover'],
   trim: v.trim ?? null,
 };
 

@@ -26,7 +26,7 @@ export const PAPER = {        // landscape sheet, w x h in points
 export const DEFAULTS = {
   preset: 'auto', margin: 10.0, scale: 0.90, paper: 'letter', gutter: 36.0,
   frame: false, dryRun: false, force: false, minScale: 0.85, sample: 40,
-  pct: 5.0, dpi: 50, oversize: '1up', keepEdges: false, trim: null,
+  pct: 5.0, dpi: 50, oversize: '1up', keepEdges: false, keepCover: false, trim: null,
 };
 
 // Lines a publisher stamps on every page.  Matched against the extracted text,
@@ -45,6 +45,13 @@ const STAMPS = new RegExp([
   'electronic copy available at',               // SSRN
   'terms of use,? available at',
 ].map((s) => s.replace(/ /g, '')).join('|'), 'i');
+
+// What the page a publisher puts in front of a download says about itself.
+// Matched, like STAMPS, with whitespace removed, and only against page 1.
+const COVERS = [
+  ['JSTOR', /youruseofthejstorarchiveindicates|jstorisanot-for-profit|earlyjournalcontentonjstor/i],
+  ['HeinOnline', /youruseofthisheinonlinepdfindicates|contentdownloadedfromheinonline/i],
+];
 
 // A file that was read fine but is not worth 2-upping (`skipped`), or one that
 // could not be processed at all.
@@ -159,6 +166,15 @@ async function stampBoxes(doc, sample) {
     page.cleanup();
   }
   return out;
+}
+
+// Whose cover page page 1 is ("JSTOR", "HeinOnline"), or null if it is not one.
+async function coverPage(doc) {
+  const page = await doc.getPage(1);
+  const text = (await page.getTextContent()).items.map((it) => it.str).join('').replace(/\s+/g, '');
+  page.cleanup();
+  const hit = COVERS.find(([, re]) => re.test(text));
+  return hit ? hit[0] : null;
 }
 
 // --- a page's ink, as a pw x ph grid of 0/1 ---------------------------------
@@ -433,14 +449,25 @@ function formXObject(out, copier, page) {
 // 2-up the PDF in `bytes` (a Uint8Array).
 //
 // env.openPdfjs(bytes) returns a pdf.js document and env.createCanvas(w, h) a
-// canvas; both are only used when the margins are measured.  log(message)
+// canvas, for reading the text and measuring the margins.  log(message)
 // receives each line of the report.
 //
-// Returns { scale, pages, sheets, pdf }: the source's page count, the number
-// of sheets they went onto, and the new file's bytes (null on a dry run).  Throws Pdf2pageError - with .skipped set when the file is fine but
-// would shrink below minScale.
+// Returns { scale, pages, sheets, cover, pdf }: the source's page count, the
+// number of sheets they went onto, whose cover page was left out (or null),
+// and the new file's bytes (null on a dry run).  Throws Pdf2pageError - with
+// .skipped set when the file is fine but would shrink below minScale.
 export async function pdf2page(bytes, options = {}, env = {}, log = () => {}) {
-  const a = { ...DEFAULTS, ...options };
+  let doc = null;
+  // pdf.js takes ownership of the buffer it is given, so it gets a copy
+  const pdfjsDoc = async () => (doc ??= await env.openPdfjs(bytes.slice()));
+  try {
+    return await run(bytes, { ...DEFAULTS, ...options }, pdfjsDoc, env, log);
+  } finally {
+    if (doc) await doc.loadingTask.destroy();
+  }
+}
+
+async function run(bytes, a, pdfjsDoc, env, log) {
   const paper = String(a.paper).toLowerCase().replace(/paper$/, '');
   if (!PAPER[paper]) {
     throw new Pdf2pageError(`unknown --paper ${a.paper}; choose from ${Object.keys(PAPER).join(', ')}`);
@@ -462,16 +489,31 @@ export async function pdf2page(bytes, options = {}, env = {}, log = () => {}) {
   }
   if (!pages.length) throw new Pdf2pageError('it has no pages');
 
-  // A JSTOR or HeinOnline download leads with a cover page, often a different
-  // size and nearly full of text.  Measured in with the rest it wrecks the
-  // margins, and sized in with the rest it shrinks the whole document to fit
-  // itself, so pages of any less common size are set aside: placed untrimmed,
-  // scaled only if they would overflow, and left out of both calculations.
-  const usual = [median(sizes.map((s) => s[0])), median(sizes.map((s) => s[1]))];
+  // A JSTOR or HeinOnline download leads with a page about the download
+  // itself: the citation, the terms of use.  Nobody prints an article to read
+  // that, and it knocks the pairing off by one, so it is left out.
+  let cover = null;
+  if (!a.keepCover && pages.length > 1) {
+    try {
+      cover = await coverPage(await pdfjsDoc());
+    } catch {
+      // unreadable text just means no cover page was recognised
+    }
+    if (cover) log(`page 1 is a ${cover} cover page; leaving it out (--keep-cover to keep it)`);
+  }
+  const kept = pages.map((_, i) => i).filter((i) => !(cover && i === 0));
+
+  // A page of a different size from the rest - a cover page that was kept or
+  // not recognised, a fold-out - is often nearly full of text.  Measured in
+  // with the rest it wrecks the margins, and sized in with the rest it shrinks
+  // the whole document to fit itself, so pages of any less common size are set
+  // aside: placed untrimmed, scaled only if they would overflow, and left out
+  // of both calculations.
+  const usual = [median(kept.map((i) => sizes[i][0])), median(kept.map((i) => sizes[i][1]))];
   const regularSize = (wh) => Math.abs(wh[0] - usual[0]) <= SIZE_TOL
     && Math.abs(wh[1] - usual[1]) <= SIZE_TOL;
   const regular = [], oddSized = [];
-  sizes.forEach((wh, i) => (regularSize(wh) ? regular : oddSized).push(i));
+  kept.forEach((i) => (regularSize(sizes[i]) ? regular : oddSized).push(i));
   if (oddSized.length) {
     const n = oddSized.length;
     const shown = oddSized.slice(0, 4).map((i) => i + 1).join(', ');
@@ -497,14 +539,12 @@ export async function pdf2page(bytes, options = {}, env = {}, log = () => {}) {
   } else if (a.preset === 'auto') {
     let measured = null;
     try {
-      // pdf.js takes ownership of the buffer it is given, so it gets a copy
-      const doc = await env.openPdfjs(bytes.slice());
+      const doc = await pdfjsDoc();
       const stamps = a.keepEdges ? new Map() : await stampBoxes(doc, a.sample);
       measured = await measure(doc, env, sizes, {
         sample: a.sample, dpi: a.dpi, stripEdges: !a.keepEdges,
         only: new Set(regular.map((i) => i + 1)), stamps, log,
       });
-      await doc.loadingTask.destroy();
     } catch (e) {
       log(`could not render it to measure (${e.message})`);
     }
@@ -581,12 +621,12 @@ export async function pdf2page(bytes, options = {}, env = {}, log = () => {}) {
       + `(margins too small to reclaim; threshold ${pct(a.minScale)}). `
       + 'Use --force or lower --min-scale to override.', { skipped: true, scale });
   }
-  if (a.dryRun) return { scale, pages: pages.length, sheets: 0, pdf: null };
+  if (a.dryRun) return { scale, pages: pages.length, sheets: 0, cover, pdf: null };
 
   // pair the pages up, giving each 1-up page a sheet of its own
   const plan = [];
   let pair = [];
-  for (let i = 0; i < pages.length; i++) {
+  for (const i of kept) {
     if (oneUp.has(i)) {
       if (pair.length) { plan.push(pair); pair = []; }
       plan.push([i]);
@@ -630,7 +670,7 @@ export async function pdf2page(bytes, options = {}, env = {}, log = () => {}) {
   // no object streams: they need PDF 1.5, and the oldest printer firmware
   // this has to get through is fussier than any viewer
   return {
-    scale, pages: pages.length, sheets: plan.length,
+    scale, pages: pages.length, sheets: plan.length, cover,
     pdf: await out.save({ useObjectStreams: false }),
   };
 }
