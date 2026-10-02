@@ -57,6 +57,10 @@ show whether a change moved anything; see `test/samples.js`.
    sits exactly where a footnote would, so no amount of geometry tells them
    apart.
 
+   A typesetter's proof has the opposite problem: crop marks and a slug line
+   out at the very edges of an oversized sheet. The file says where the real
+   page ends (its trim box), and anything outside that is ignored.
+
    In a scan with no text layer, a stamp is caught by shape instead: a thin
    strip standing clear of the text. A band at the top or bottom also has to be
    *wider* than the text block, so running heads and page numbers are never

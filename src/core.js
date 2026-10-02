@@ -300,7 +300,7 @@ function stripStamps(ink, W, H, maxW = 14.0, maxH = 26.0, minGap = 6.0, widerBy 
 // full-resolution bitmap.
 //
 // See aggregate() for how the per-page boxes become one box per parity.
-async function measure(doc, env, sizes, { sample, dpi, stripEdges, only, stamps, log }) {
+async function measure(doc, env, sizes, { sample, dpi, stripEdges, only, stamps, marks, log }) {
   const boxes = new Map();
   let stamped = 0, pages = 0, found = 0;
   for (let n = 1; n <= Math.min(sample, doc.numPages); n++) {
@@ -322,6 +322,15 @@ async function measure(doc, env, sizes, { sample, dpi, stripEdges, only, stamps,
     }
     if (!anyInk(ink)) continue;
     pages++;
+    if (marks[n - 1]) {
+      // everything outside the trim box is printer's marks
+      const [l, b, r, t] = marks[n - 1];
+      const x0 = Math.ceil(l / W * pw), x1 = pw - Math.ceil(r / W * pw);
+      const y0 = Math.ceil(t / H * ph), y1 = ph - Math.ceil(b / H * ph);
+      blank(ink, 0, 0, x0 - 1, ph - 1); blank(ink, x1, 0, pw - 1, ph - 1);
+      blank(ink, 0, 0, pw - 1, y0 - 1); blank(ink, 0, y1, pw - 1, ph - 1);
+      if (!anyInk(ink)) continue;
+    }
     const boxesHere = stamps.get(n) || [];
     if (boxesHere.length) found++;
     for (const [x0, y0, x1, y1] of boxesHere) {
@@ -414,6 +423,27 @@ function decodeContents(contents) {
   return out;
 }
 
+// How far inside the page its trim box sits, as displayed: [L, B, R, T] in
+// points, or null when the page has no margin of that kind.
+//
+// A proof straight from the typesetter is a sheet bigger than the book's page,
+// with crop marks, registration targets and a slug line ("UNCORRECTED PROOF",
+// the file name, the date) in the extra.  That is ink right out at the edges,
+// so the page measures as having no margin at all - but the file says where
+// the real page ends: that is what /TrimBox is for.
+function printersMarks(page) {
+  const c = page.getCropBox(), t = page.getTrimBox();
+  // [L, B, R, T] in the page's own frame, then turned to match /Rotate
+  const own = [t.x - c.x, t.y - c.y, c.x + c.width - (t.x + t.width), c.y + c.height - (t.y + t.height)];
+  if (own.some((v) => v < -0.5) || own.every((v) => v < 1)) return null;
+  // a trim box that leaves less than half the page is more likely a mistake
+  if (t.width < c.width / 2 || t.height < c.height / 2) return null;
+  const [l, b, r, tp] = own.map((v) => Math.max(0, v));
+  return {
+    0: [l, b, r, tp], 90: [b, r, tp, l], 180: [r, tp, l, b], 270: [tp, l, b, r],
+  }[((page.getRotation().angle % 360) + 360) % 360];
+}
+
 // The page, untouched, as a Form XObject in displayed orientation.
 //
 // Wrapping the page's content stream as-is is what LaTeX's pdfpages does: the
@@ -469,7 +499,7 @@ async function run(bytes, a, pdfjsDoc, env, log) {
   }
   const [SW, SH] = PAPER[paper];
 
-  let src, pages, sizes;
+  let src, pages, sizes, marks;
   try {
     src = await PDFDocument.load(bytes, { password: '' });
     pages = src.getPages();
@@ -479,6 +509,7 @@ async function run(bytes, a, pdfjsDoc, env, log) {
       const { width, height } = pg.getCropBox();
       return pg.getRotation().angle % 180 === 0 ? [width, height] : [height, width];
     });
+    marks = pages.map(printersMarks);
   } catch (e) {
     throw new ConcurError(`could not read it as a PDF (${e.message})`);
   }
@@ -536,9 +567,13 @@ async function run(bytes, a, pdfjsDoc, env, log) {
     try {
       const doc = await pdfjsDoc();
       const stamps = a.keepEdges ? new Map() : await stampBoxes(doc, a.sample);
+      if (!a.keepEdges && regular.some((i) => marks[i])) {
+        log("ignoring the printer's marks outside the trim box (--keep-edges to count them)");
+      }
       measured = await measure(doc, env, sizes, {
         sample: a.sample, dpi: a.dpi, stripEdges: !a.keepEdges,
-        only: new Set(regular.map((i) => i + 1)), stamps, log,
+        only: new Set(regular.map((i) => i + 1)), stamps,
+        marks: a.keepEdges ? [] : marks, log,
       });
     } catch (e) {
       log(`could not render it to measure (${e.message})`);
