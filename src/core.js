@@ -41,6 +41,17 @@ const STAMPS = new RegExp([
   'terms of use,? available at',
 ].map((s) => s.replace(/ /g, '')).join('|'), 'i');
 
+// A date or a time of day: 5/6/2019, 2019-05-06, May 6, 2019, 11:50 AM,
+// 17:32:51.  Matched against text with its spacing kept, since run together a
+// date and a time are just one long number.
+const DATE = new RegExp([
+  '(?<!\\d)\\d{1,2}/\\d{1,2}/\\d{2,4}(?!\\d)',
+  '(?<!\\d)\\d{4}-\\d{2}-\\d{2}(?!\\d)',
+  '\\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?\\s*\\d{1,2},\\s*\\d{4}',
+  '(?<!\\d)\\d{1,2}:\\d{2}(:\\d{2})?\\s*[ap]\\.?m\\b',
+  '(?<![\\d:])\\d{1,2}:\\d{2}:\\d{2}(?![\\d:])',
+].join('|'), 'i');
+
 // What the page a publisher puts in front of a download says about itself.
 // Matched, like STAMPS, with whitespace removed, and only against page 1.
 const COVERS = [
@@ -83,7 +94,7 @@ const mul = (m, n) => [
 ];
 
 // Where each page's download stamps sit: Map(page -> [[x0, y0, x1, y1]]), in
-// points from the top left.
+// points from the top left, and the slug line if there is one (see below).
 //
 // pdf.js gives every run of text its position; runs sharing a baseline are
 // joined back into a line, and a block of lines whose text matches STAMPS is a
@@ -91,6 +102,8 @@ const mul = (m, n) => [
 // cannot separate JSTOR's centred footer from the footnotes right above it.
 async function stampBoxes(doc, sample) {
   const out = new Map();
+  const upright = [];      // every upright line: { n, key, d0, box }
+  let withText = 0;
   for (let n = 1; n <= Math.min(sample, doc.numPages); n++) {
     const page = await doc.getPage(n);
     const vp = page.getViewport({ scale: 1 });
@@ -121,6 +134,7 @@ async function stampBoxes(doc, sample) {
       }
       byDir[k].push(w);
     }
+    if (byDir.some((d) => d.length)) withText++;
     for (const [k, words] of byDir.entries()) {
       if (!words.length) continue;
       const [ux, uy] = [[1, 0], [0, 1], [-1, 0], [0, -1]][k];
@@ -141,6 +155,13 @@ async function stampBoxes(doc, sample) {
           d0: Math.min(...line.map((w) => w.d0)), d1: Math.max(...line.map((w) => w.d1)),
           text: line.map((w) => w.str).join(''),
         };
+        if (k === 0) {
+          // with spaces put back where the runs leave a gap, for showing it
+          const shown = line.map((w, i) => (i && w.r0 - line[i - 1].r1 > 1 ? ' ' : '') + w.str)
+            .join('').replace(/\s+/g, ' ').trim();
+          upright.push({ n, key: box.text.replace(/\s+/g, ''), shown, d0: box.d0,
+            box: [box.r0, box.d0, box.r1, box.d1] });
+        }
         const last = blocks[blocks.length - 1];
         if (last && box.d0 - last.d1 < 6.0) {
           last.r0 = Math.min(last.r0, box.r0); last.r1 = Math.max(last.r1, box.r1);
@@ -160,7 +181,34 @@ async function stampBoxes(doc, sample) {
     }
     page.cleanup();
   }
-  return out;
+
+  // A slug: the line a typesetting template prints on every page for the
+  // people producing the journal - a file name and the date it was last
+  // saved ("Sprigman_Final_Review (Do Not Delete) 5/6/2019 11:50 AM").  What
+  // gives it away is not its wording, which varies, but a date that stays the
+  // same in the same place on every page: no running head does that, since a
+  // running head that never changes carries no date.
+  let slug = null;
+  const seen = new Map();
+  for (const l of upright) {
+    if (!DATE.test(l.shown)) continue;
+    // a line of a download stamp - JSTOR's carries the date it was downloaded
+    const inStamp = (out.get(l.n) || []).some(([x0, y0, x1, y1]) => l.box[0] >= x0 - 1
+      && l.box[1] >= y0 - 1 && l.box[2] <= x1 + 1 && l.box[3] <= y1 + 1);
+    if (inStamp) continue;
+    if (!seen.has(l.key)) seen.set(l.key, []);
+    seen.get(l.key).push(l);
+  }
+  for (const [key, ls] of seen) {
+    const pages = new Set(ls.map((l) => l.n));
+    const ds = ls.map((l) => l.d0);
+    if (pages.size < Math.max(3, Math.ceil(0.9 * withText))) continue;
+    if (Math.max(...ds) - Math.min(...ds) > 3) continue;
+    slug = { text: ls[0].shown, boxes: new Map() };
+    for (const l of ls) slug.boxes.set(l.n, l.box);
+    break;
+  }
+  return { stamps: out, slug };
 }
 
 // Whose cover page page 1 is ("JSTOR", "HeinOnline"), or null if it is not one.
@@ -226,6 +274,26 @@ function mergeRuns(runs, pt, minGap) {
   return out;
 }
 
+// Whether rows r0..r1 hold nothing but horizontal rules: every row with ink in
+// it is solid from one end to the other, and at least a quarter of the page
+// wide.  A rule has nothing to read in it, so unlike a running head it can go
+// whatever its width - such as the empty box a law review template draws
+// above the running head on every page.
+function onlyRules(ink, r0, r1) {
+  let any = false;
+  for (let y = r0; y <= r1; y++) {
+    const row = ink.data.subarray(y * ink.pw, (y + 1) * ink.pw);
+    const first = row.indexOf(1);
+    if (first < 0) continue;
+    const last = row.lastIndexOf(1);
+    let filled = 0;
+    for (let x = first; x <= last; x++) filled += row[x];
+    if (last - first + 1 < ink.pw / 4 || filled < 0.9 * (last - first + 1)) return false;
+    any = true;
+  }
+  return any;
+}
+
 // Blank out a download stamp standing in the margin, if there is one.
 //
 // Publishers stamp every page: OUP runs a line of rotated text down the side
@@ -238,7 +306,8 @@ function mergeRuns(runs, pt, minGap) {
 // shape describes a running head or a page number, which must not be clipped,
 // so a band there also has to be wider than the text block it sits under - by
 // widerBy pt - which a stamp reaching toward the page edges is and a centred
-// folio is not.  Edits ink in place; returns the number of stamps removed.
+// folio is not - unless it is nothing but rules (see onlyRules).  Edits ink in
+// place; returns the number of stamps removed.
 function stripStamps(ink, W, H, maxW = 14.0, maxH = 26.0, minGap = 6.0, widerBy = 12.0) {
   let removed = 0;
   for (let pass = 0; pass < 4; pass++) {   // a stamp can run to two or three lines
@@ -254,7 +323,7 @@ function stripStamps(ink, W, H, maxW = 14.0, maxH = 26.0, minGap = 6.0, widerBy 
         const nb = first ? runs[1] : runs[runs.length - 2];
         const gap = first ? nb[0] - b - 1 : a - nb[1] - 1;
         if ((b - a + 1) * pt > limit || gap * pt < minGap) continue;
-        if (!vertical) {
+        if (!vertical && !onlyRules(ink, a, b)) {
           // the band against the ink that remains without it
           const bx = runsOf(colAny(ink, a, b)), rx = runsOf(colAny(ink, a, b, true));
           if (!bx.length || !rx.length) continue;
@@ -300,7 +369,7 @@ function stripStamps(ink, W, H, maxW = 14.0, maxH = 26.0, minGap = 6.0, widerBy 
 // full-resolution bitmap.
 //
 // See aggregate() for how the per-page boxes become one box per parity.
-async function measure(doc, env, sizes, { sample, dpi, stripEdges, only, stamps, marks, log }) {
+async function measure(doc, env, sizes, { sample, dpi, stripEdges, only, stamps, slug, marks, log }) {
   const boxes = new Map();
   let stamped = 0, pages = 0, found = 0;
   for (let n = 1; n <= Math.min(sample, doc.numPages); n++) {
@@ -333,7 +402,8 @@ async function measure(doc, env, sizes, { sample, dpi, stripEdges, only, stamps,
     }
     const boxesHere = stamps.get(n) || [];
     if (boxesHere.length) found++;
-    for (const [x0, y0, x1, y1] of boxesHere) {
+    const slugHere = slug?.boxes.get(n);
+    for (const [x0, y0, x1, y1] of slugHere ? [...boxesHere, slugHere] : boxesHere) {
       // blank the stamp where the text says it is, with a little slack for the
       // ink that antialiasing spreads past the glyph box
       blank(ink, Math.floor((x0 - 1) / W * pw), Math.floor((y0 - 1) / H * ph),
@@ -550,6 +620,7 @@ async function run(bytes, a, pdfjsDoc, env, log) {
 
   // content margins per parity: {1: odd pages, 0: even pages}
   let raw = new Map();          // per-page boxes
+  let stamps = new Map(), slug = null;
   let oneUp = new Set();        // pages (0-based) to print one to a sheet
   let marg;
   if (a.trim) {
@@ -566,13 +637,17 @@ async function run(bytes, a, pdfjsDoc, env, log) {
     let measured = null;
     try {
       const doc = await pdfjsDoc();
-      const stamps = a.keepEdges ? new Map() : await stampBoxes(doc, a.sample);
+      ({ stamps, slug } = a.keepEdges ? { stamps: new Map(), slug: null }
+        : await stampBoxes(doc, a.sample));
+      if (slug) {
+        log(`"${slug.text}" is on every page; keeping it on the first only`);
+      }
       if (!a.keepEdges && regular.some((i) => marks[i])) {
         log("ignoring the printer's marks outside the trim box (--keep-edges to count them)");
       }
       measured = await measure(doc, env, sizes, {
         sample: a.sample, dpi: a.dpi, stripEdges: !a.keepEdges,
-        only: new Set(regular.map((i) => i + 1)), stamps,
+        only: new Set(regular.map((i) => i + 1)), stamps, slug,
         marks: a.keepEdges ? [] : marks, log,
       });
     } catch (e) {
@@ -688,6 +763,22 @@ async function run(bytes, a, pdfjsDoc, env, log) {
       ops.push(`q ${f3(ox)} ${f3(oy)} ${f3(w)} ${f3(h)} re W n `
         + `${f5(s)} 0 0 ${f5(s)} ${f3(ox - s * b[0])} ${f3(oy - s * b[1])} cm /${name} Do Q`);
       if (a.frame) ops.push(`q 0.5 w ${f3(ox)} ${f3(oy)} ${f3(w)} ${f3(h)} re S Q`);
+      // The slug, kept once: drawn a second time from the first page, moved
+      // down to just inside the top of the trimmed box when the page is blank
+      // there (as an article's first page usually is), else just above it.
+      if (j === kept[0] && slug?.boxes.has(j + 1)) {
+        const [x0, y0, x1, y1] = slug.boxes.get(j + 1);   // from the top left
+        const H = sizes[j][1];
+        const sh = (y1 - y0) * s;                          // its height on the sheet
+        const inkTop = raw.get(j + 1)?.[3];                // where this page's ink begins
+        const room = inkTop === undefined ? 0 : inkTop - (H - b[3]);
+        const dy = room >= y1 - y0 + 6 ? oy + h - 2 * s - sh : oy + h + 3;
+        if (dy + sh <= sheetH - 4) {
+          const sx = ox + s * (x0 - b[0]);
+          ops.push(`q ${f3(sx - 1)} ${f3(dy - 1)} ${f3(s * (x1 - x0) + 2)} ${f3(sh + 2)} re W n `
+            + `${f5(s)} 0 0 ${f5(s)} ${f3(ox - s * b[0])} ${f3(dy - s * (H - y1))} cm /${name} Do Q`);
+        }
+      }
     });
     sheet.node.set(PDFName.of('Resources'), out.context.obj({ XObject: xobjects }));
     sheet.node.set(PDFName.of('Contents'),

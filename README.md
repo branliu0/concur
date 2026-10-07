@@ -57,6 +57,14 @@ show whether a change moved anything; see `test/samples.js`.
    sits exactly where a footnote would, so no amount of geometry tells them
    apart.
 
+   Some law reviews' templates print a slug above the running head on every
+   page — the production file's name and when it was last saved, between two
+   rules — or leave the two rules with nothing between them. A line that
+   carries a date and repeats unchanged on every page is a slug: no running
+   head does that. It is left out of the measurement and drawn once, at the
+   top of the first page. A band at the top or bottom holding nothing but
+   rules is left out too, since a rule has nothing to read in it.
+
    A typesetter's proof has the opposite problem: crop marks and a slug line
    out at the very edges of an oversized sheet. The file says where the real
    page ends (its trim box), and anything outside that is ignored.
