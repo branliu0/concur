@@ -17,7 +17,8 @@ Print a PDF 2-up with margins trimmed.
                        eight numbers set odd pages, then even
       --no-trim        plain 2-up: leave the margins as they are
       --keep-edges     count download stamps as content instead of ignoring them
-      --keep-cover     keep the cover page JSTOR and HeinOnline put in front
+      --keep-cover     keep the cover page JSTOR, HeinOnline or a school's
+                       repository puts in front
   -m, --margin PT      whitespace to keep around the content (default 10)
   -s, --scale F        fraction of the sheet to use (default 0.90)
       --gutter PT      gap between the two pages (default 36)

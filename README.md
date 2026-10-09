@@ -74,7 +74,8 @@ show whether a change moved anything; see `test/samples.js`.
    *wider* than the text block, so running heads and page numbers are never
    clipped. `--keep-edges` turns both off.
 3. **Set aside pages unlike the rest.** JSTOR and HeinOnline downloads lead
-   with a cover page about the download itself. Page 1 is recognised as one by
+   with a cover page about the download itself, and so do the law school
+   repositories built on bepress Digital Commons. Page 1 is recognised as one by
    what it says, and left out (`--keep-cover` keeps it). Any other page whose
    size differs from the document's usual one is left out of the measurement,
    placed untrimmed, and not allowed to set the scale for everything else.
@@ -100,7 +101,7 @@ show whether a change moved anything; see `test/samples.js`.
 | `--no-trim` | | Plain 2-up: leave the margins as they are |
 | `--trim "L B R T"` | | Set content margins yourself, in points. Eight numbers set odd pages, then even. Handy for cutting a stamp under the text, like JSTOR's |
 | `--keep-edges` | | Treat download stamps as content instead of ignoring them |
-| `--keep-cover` | | Keep the cover page JSTOR and HeinOnline put in front |
+| `--keep-cover` | | Keep the cover page JSTOR, HeinOnline or a school's repository puts in front |
 | `-m, --margin` | `10` | Whitespace kept around the content, pt |
 | `-s, --scale` | `0.90` | Fraction of the sheet used, leaving a printable border |
 | `--gutter` | `36` | Gap between the two pages, pt |

@@ -57,6 +57,8 @@ const DATE = new RegExp([
 const COVERS = [
   ['JSTOR', /youruseofthejstorarchiveindicates|jstorisanot-for-profit|earlyjournalcontentonjstor/i],
   ['HeinOnline', /youruseofthisheinonlinepdfindicates|contentdownloadedfromheinonline/i],
+  // bepress Digital Commons, which most US law schools' repositories run on
+  ['repository', /followthisandadditionalworksat|broughttoyouforfreeandopenaccessby/i],
 ];
 
 // A file that was read fine but is not worth 2-upping (`skipped`), or one that
