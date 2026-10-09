@@ -116,36 +116,23 @@ show whether a change moved anything; see `test/samples.js`.
 Progress and measurements go to stderr, and the output path goes to stdout.
 The exit status is 1 when a file is skipped or fails.
 
-## pdf2page, the Python original
+## Finder Quick Action (macOS)
 
-concur began as `pdf2page`, a single Python script that is still here. It
-makes the same decisions, with three differences: it places a cover page
-untrimmed where concur leaves it out; it still has the fixed-margin presets
-(`-p booklet`, `-p full`, and `-p none` for concur's `--no-trim`) from before
-it learned to measure; and its measured trims come out a point or two apart,
-because poppler and pdf.js antialias differently.
+Right-click one or more PDFs → **Quick Actions → concur 2-up**.
 
-It needs [uv](https://docs.astral.sh/uv/), which fetches its Python
-dependencies on first use, and poppler (`brew install poppler`). Put it
-somewhere on your `PATH`:
-
-```
-ln -s ~/dev/pdf2page/pdf2page ~/bin/pdf2page
-```
-
-### Finder Quick Action (macOS)
-
-Right-click one or more PDFs → **Quick Actions → pdf2page 2-up**.
-
-1. Symlink the wrapper next to `pdf2page`:
-   `ln -s ~/dev/pdf2page/pdf2page-quickaction ~/bin/pdf2page-quickaction`
+1. Put `concur` and the wrapper on your `PATH`:
+   `ln -s ~/dev/pdf2page/src/cli.js ~/bin/concur` and
+   `ln -s ~/dev/pdf2page/concur-quickaction ~/bin/concur-quickaction`
 2. Copy the workflow into place:
-   `cp -R "pdf2page 2-up.workflow" ~/Library/Services/`
+   `cp -R "concur 2-up.workflow" ~/Library/Services/`
 3. Turn it on in **System Settings → General → Login Items & Extensions →
    Finder** (it won't show in the menu until you do).
 
 Every run ends in a dialog. **Open** opens the result, and when a file was
 skipped for being too small, **Make anyway** redoes it with `--force`. The
-wrapper expects `pdf2page` at `~/bin/pdf2page` and looks for uv in
-`~/.local/bin` and poppler in `/opt/homebrew/bin`; edit
-`pdf2page-quickaction` if yours live elsewhere.
+wrapper expects `concur` at `~/bin/concur` and looks for node in
+`/opt/homebrew/bin` or `/usr/local/bin`; edit `concur-quickaction` if yours
+lives elsewhere.
+
+concur began as `pdf2page`, a Python script; it is in this repository's
+history up to the JavaScript port.

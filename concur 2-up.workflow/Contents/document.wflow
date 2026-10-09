@@ -59,7 +59,7 @@
 				<key>ActionParameters</key>
 				<dict>
 					<key>COMMAND_STRING</key>
-					<string>exec "$HOME/bin/pdf2page-quickaction" "$@"
+					<string>exec "$HOME/bin/concur-quickaction" "$@"
 </string>
 					<key>CheckedForUserDefaultShell</key>
 					<true/>

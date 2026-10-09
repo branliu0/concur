@@ -1,15 +1,14 @@
 #!/bin/zsh
-# Finder Quick Action wrapper around pdf2page.
+# Finder Quick Action wrapper around concur.
 #
-# Services are launched by launchd with a bare PATH, so uv (~/.local/bin) and
-# poppler (/opt/homebrew/bin) both have to be put back before pdf2page can
-# find them.  Quick Actions also swallow stdout
+# Services are launched by launchd with a bare PATH, so node (/opt/homebrew/bin)
+# has to be put back before concur can run.  Quick Actions also swallow stdout
 # and stderr, and notifications posted from a service are silently dropped, so
 # every run ends in a dialog: success offers to open the result, a skip offers
-# to make it anyway (--force), and a failure shows pdf2page's own stderr.
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+# to make it anyway (--force), and a failure shows concur's own stderr.
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-PDF2PAGE="$HOME/bin/pdf2page"
+CONCUR="$HOME/bin/concur"
 
 dialog() {        # title message button...  -> prints the button clicked
   osascript -e 'on run argv' \
@@ -21,27 +20,29 @@ dialog() {        # title message button...  -> prints the button clicked
 
 typeset -a ok_in ok_out skipped failed report
 
-run() {           # file [extra args] - runs pdf2page and records the outcome
+run() {           # file [extra args] - runs concur and records the outcome
   local f=$1; shift
   local base=${f:t} errfile out rc msg
-  errfile=$(mktemp -t pdf2page)
-  out=$("$PDF2PAGE" "$@" "$f" 2>"$errfile"); rc=$?
+  errfile=$(mktemp -t concur)
+  out=$("$CONCUR" "$@" "$f" 2>"$errfile"); rc=$?
   msg=$(<"$errfile"); rm -f "$errfile"
   local -a lines=("${(@f)msg}") m
   if (( rc == 0 )); then
     ok_in+=("$f"); ok_out+=("$out")
     m=("${(@M)lines:#*text ends at*}")
-    local detail=${${m[1]#pdf2page: }:-done}
+    local detail=${${m[1]#concur: }:-done}
     m=("${(@M)lines:#*1-up*}")          # note pages that got a sheet to themselves
-    (( $#m )) && detail+=", ${${m[1]#pdf2page: }%% \(--oversize*}"
+    (( $#m )) && detail+=", ${${m[1]#concur: }%% \(--oversize*}"
+    m=("${(@M)lines:#*cover page*}")    # and a cover page left out
+    (( $#m )) && detail+=", ${${m[1]#concur: }%% \(--keep-cover*}"
     report+=("✓ $base -> ${out:t}  ($detail)")
   elif [[ $msg == *"skipping"* ]]; then
     skipped+=("$f")
     m=("${(@M)lines:#*skipping*}")
-    report+=("– $base skipped: ${m[1]#pdf2page: skipping - }")
+    report+=("– $base skipped: ${m[1]#concur: skipping - }")
   else
     failed+=("$f")
-    report+=("✗ $base failed:"$'\n'"${msg:-pdf2page exited $rc with no output.}")
+    report+=("✗ $base failed:"$'\n'"${msg:-concur exited $rc with no output.}")
   fi
 }
 
@@ -56,10 +57,10 @@ while true; do
   (( $#ok_out > 1 )) && buttons+=("Open all")
   buttons+=("OK")
 
-  title="pdf2page"
-  (( $# == 1 && $#ok_out )) && title="pdf2page - done"
-  (( $# == 1 && $#skipped )) && title="pdf2page - skipped"
-  (( $#failed )) && title="pdf2page - failed"
+  title="concur"
+  (( $# == 1 && $#ok_out )) && title="concur - done"
+  (( $# == 1 && $#skipped )) && title="concur - skipped"
+  (( $#failed )) && title="concur - failed"
 
   choice=$(dialog "$title" "${(pj:\n\n:)report}" "${buttons[@]}")
 
