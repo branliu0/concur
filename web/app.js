@@ -44,14 +44,14 @@ function add(file) {
   const actions = el('div', { className: 'actions' });
   const log = el('pre');
   const details = el('details', { hidden: true }, el('summary', { textContent: 'Details' }), log);
-  const row = el('li', {}, el('div', { className: 'name', textContent: file.name }),
-    status, actions, details);
+  const row = el('li', { className: 'waiting' },
+    el('div', { className: 'name', textContent: file.name }), status, actions, details);
   $('files').prepend(row);
 
   // `override` changes the options for this file alone, when it is run again
   const run = (override = {}) => enqueue(async () => {
-    row.className = '';
-    status.textContent = 'Working…';
+    row.className = 'working';
+    status.textContent = 'Trimming margins…';
     actions.replaceChildren();
     const lines = [];
     // let "Working…" paint before the main thread gets busy
@@ -97,15 +97,26 @@ function add(file) {
   run();
 }
 
+const drop = $('drop');
+const prompt = drop.querySelector('strong');
+const promptText = prompt.textContent;
+let gotTimer;
+
 const addAll = (files) => {
-  for (const f of files) {
-    if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) add(f);
-  }
+  const pdfs = [...files].filter((f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
+  pdfs.forEach(add);
+  // say so on the box itself, where the eye already is
+  drop.classList.add('got');
+  prompt.textContent = pdfs.length
+    ? `Got ${pdfs.length === 1 ? 'it' : `${pdfs.length} PDFs`} — working below`
+    : 'That wasn’t a PDF';
+  clearTimeout(gotTimer);
+  gotTimer = setTimeout(() => { drop.classList.remove('got'); prompt.textContent = promptText; }, 2000);
+  if (pdfs.length) $('files').firstElementChild.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 };
 
 $('pick').addEventListener('change', (e) => { addAll(e.target.files); e.target.value = ''; });
 
-const drop = $('drop');
 // accept a drop anywhere on the page, not just on the box
 addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
 addEventListener('dragleave', (e) => { if (!e.relatedTarget) drop.classList.remove('over'); });

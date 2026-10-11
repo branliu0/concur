@@ -73,9 +73,33 @@
   .examples b { color: var(--fg); font-weight: 600; }
   .examples .what { flex: 1 1 240px; }
   #files { list-style: none; margin: 28px 0 0; padding: 0; display: grid; gap: 10px; }
+  #files:empty { margin: 0; }
   #files li {
+    position: relative; overflow: hidden;
     padding: 14px 16px; background: var(--card); border: 1px solid var(--line);
     border-radius: 10px;
+    animation: arrive .35s ease-out;
+  }
+  /* a new file drops in at the top of the list */
+  @keyframes arrive { from { opacity: 0; transform: translateY(-10px); } }
+  #files li.waiting { opacity: .65; }
+  #files li.working { border-color: var(--accent); }
+  /* a bar sweeping along the bottom while it works; transform-only, so it
+     keeps moving even while the work has the page's main thread */
+  #files li.working::after {
+    content: ""; position: absolute; left: 0; bottom: 0; width: 35%; height: 3px;
+    background: var(--accent); animation: sweep 1.1s ease-in-out infinite;
+  }
+  @keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+  /* and a brief glow when it is done */
+  #files li.ok { animation: done .9s ease-out; }
+  @keyframes done { from { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 35%, transparent); } }
+  /* the drop box acknowledges the drop */
+  #drop.got { border-style: solid; border-color: var(--ok); }
+  #drop.got strong { color: var(--ok); }
+  @media (prefers-reduced-motion: reduce) {
+    #files li, #files li.ok { animation: none; }
+    #files li.working::after { animation-duration: 3s; }
   }
   .name { font-weight: 600; overflow-wrap: anywhere; }
   .status { margin-top: 2px; font-size: 14px; color: var(--dim); }
@@ -151,6 +175,8 @@
     </div>
   </details>
 
+  <ul id="files"></ul>
+
   <div class="examples">
     <span class="what">Example: <b>a Supreme Court opinion</b>,
       <i>Obergefell v. Hodges</i></span>
@@ -163,8 +189,6 @@
     <a class="button" href="examples/holmes.pdf" target="_blank">Original</a>
     <a class="button" href="examples/holmes-2up.pdf" target="_blank">Two to a page</a>
   </div>
-
-  <ul id="files"></ul>
 
   <section>
     <h2>Your files stay with you</h2>
