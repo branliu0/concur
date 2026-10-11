@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PDFDocument, decodePDFRawStream } from '@cantoo/pdf-lib';
 import { concur } from '../src/core.js';
 import { env } from '../src/node-env.js';
 
@@ -14,6 +15,26 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const pkg = (name) => path.join(root, 'node_modules', name);
 const site = path.join(root, '_site');
 const cp = (from, to) => fs.cpSync(from, path.join(site, to), { recursive: true });
+const pct = (x) => `${Math.round(x * 100)}%`;
+
+// How much a print dialog shrank the pages: macOS draws each one inside
+// "q s 0 0 s x y cm ... Q", so take the commonest such s on the sheets.
+async function printedScale(bytes) {
+  const doc = await PDFDocument.load(bytes);
+  const counts = new Map();
+  for (const page of doc.getPages().slice(0, 10)) {
+    for (const ref of [page.node.Contents()].flat().flatMap((c) => c?.asArray?.() ?? [c])) {
+      const stream = doc.context.lookup(ref);
+      if (!stream) continue;
+      const text = Buffer.from(decodePDFRawStream(stream).decode()).toString('latin1');
+      for (const [, s] of text.matchAll(/\bq\s+([\d.]+)\s+0\s+0\s+\1\s+[-\d.]+\s+[-\d.]+\s+cm\b/g)) {
+        counts.set(s, (counts.get(s) ?? 0) + 1);
+      }
+    }
+  }
+  if (!counts.size) throw new Error('cannot tell how much a --manual example was shrunk');
+  return Number([...counts].sort((a, b) => b[1] - a[1])[0][0]);
+}
 
 fs.rmSync(site, { recursive: true, force: true });
 cp(path.join(root, 'web'), '.');
@@ -25,28 +46,26 @@ for (const f of ['build/pdf.min.mjs', 'build/pdf.worker.min.mjs']) {
 }
 // fonts and decoders pdf.js fetches on demand while rendering
 for (const d of ['standard_fonts', 'cmaps', 'wasm', 'iccs']) cp(path.join(pdfjs, d), `vendor/pdfjs/${d}`);
-// each example is shown two ways, both made by the tool itself: printed two
-// per page the way a print dialog would, margins and all (filling the sheet
-// but for a printer's quarter-inch border), and with concur
+// Each example is shown two ways: printed two per page the usual way, made by
+// hand in a print dialog (<name>--manual.pdf), and with concur, made here.
 const examples = path.join(site, 'examples');
 const scales = {};   // how big the text comes out, for the page to quote
 const linked = new Set([...fs.readFileSync(path.join(site, 'index.html'), 'utf8')
   .matchAll(/examples\/([\w-]+)\.pdf/g)].map((m) => m[1]));
 for (const f of fs.existsSync(examples) ? fs.readdirSync(examples) : []) {
   const stem = f.replace(/\.pdf$/, '');
-  // only the originals the page links to; anything else in there stays out
+  // only the files the page links to; anything else in there stays out
   if (!f.endsWith('.pdf') || !linked.has(stem)) {
     fs.rmSync(path.join(examples, f));
     continue;
   }
   const bytes = fs.readFileSync(path.join(examples, f));
-  for (const [suffix, options] of [
-    ['-plain', { noTrim: true, scale: 0.95, gutter: 12, keepCover: true, force: true }],
-    ['-concur', {}],
-  ]) {
-    const { pdf, scale } = await concur(new Uint8Array(bytes), options, env);
-    fs.writeFileSync(path.join(examples, `${stem}${suffix}.pdf`), pdf);
-    scales[stem + suffix] = `${Math.round(scale * 100)}%`;
+  if (stem.endsWith('--manual')) {
+    scales[stem] = pct(await printedScale(bytes));
+  } else if (linked.has(`${stem}-concur`)) {
+    const { pdf, scale } = await concur(new Uint8Array(bytes), {}, env);
+    fs.writeFileSync(path.join(examples, `${stem}-concur.pdf`), pdf);
+    scales[`${stem}-concur`] = pct(scale);
   }
 }
 
