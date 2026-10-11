@@ -44,12 +44,28 @@ function add(file) {
   const actions = el('div', { className: 'actions' });
   const log = el('pre');
   const details = el('details', { hidden: true }, el('summary', { textContent: 'Details' }), log);
+  // when it was added, so a list left open for a while still makes sense
+  const now = new Date();
+  const when = el('time', { dateTime: now.toISOString(),
+    textContent: now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+    title: now.toLocaleString() });
+  let url = null;
+  let removed = false;
+  const remove = el('button', { className: 'remove', title: 'Remove', ariaLabel: `Remove ${file.name}`,
+    textContent: '×' });
   const row = el('li', { className: 'waiting' },
-    el('div', { className: 'name', textContent: file.name }), status, actions, details);
+    el('div', { className: 'head' }, el('div', { className: 'name', textContent: file.name }), when, remove),
+    status, actions, details);
+  remove.onclick = () => {
+    removed = true;
+    if (url) URL.revokeObjectURL(url);
+    row.remove();
+  };
   $('files').prepend(row);
 
   // `override` changes the options for this file alone, when it is run again
   const run = (override = {}) => enqueue(async () => {
+    if (removed) return;
     row.className = 'working';
     status.textContent = 'Trimming margins…';
     actions.replaceChildren();
@@ -61,7 +77,9 @@ function add(file) {
       // always make it: a file that comes out small gets a warning, not a refusal
       const { scale, pages, sheets, cover, pdf } = await concur(bytes,
         { ...options(), ...override, force: true }, env, (m) => lines.push(m));
-      const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
+      if (removed) return;   // taken away while it was being worked on
+      if (url) URL.revokeObjectURL(url);
+      url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
       const name = file.name.replace(/\.pdf$/i, '') + '~2up.pdf';
       const small = scale < DEFAULTS.minScale;
       row.className = small ? 'small' : 'ok';

@@ -101,7 +101,14 @@
     #files li, #files li.ok { animation: none; }
     #files li.working::after { animation-duration: 3s; }
   }
-  .name { font-weight: 600; overflow-wrap: anywhere; }
+  .head { display: flex; align-items: baseline; gap: 10px; }
+  .name { flex: 1; font-weight: 600; overflow-wrap: anywhere; }
+  .head time { font-size: 13px; color: var(--dim); white-space: nowrap; }
+  #files button.remove {
+    align-self: center; margin: -4px -8px -4px 0; padding: 0 6px; border: 0;
+    font-size: 20px; line-height: 1; color: var(--dim);
+  }
+  #files button.remove:hover { color: var(--fg); }
   .status { margin-top: 2px; font-size: 14px; color: var(--dim); }
   li.ok .status { color: var(--ok); }
   #files li.small {
