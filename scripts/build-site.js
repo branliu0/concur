@@ -25,12 +25,16 @@ for (const f of ['build/pdf.min.mjs', 'build/pdf.worker.min.mjs']) {
 }
 // fonts and decoders pdf.js fetches on demand while rendering
 for (const d of ['standard_fonts', 'cmaps', 'wasm', 'iccs']) cp(path.join(pdfjs, d), `vendor/pdfjs/${d}`);
-// each example gets its 2-up made by the tool itself, to sit beside it
+// each example is shown two ways, both made by the tool itself: printed two
+// per page as a print dialog would, margins and all, and with concur
 const examples = path.join(site, 'examples');
 for (const f of fs.existsSync(examples) ? fs.readdirSync(examples) : []) {
   if (!f.endsWith('.pdf')) continue;
-  const { pdf } = await concur(new Uint8Array(fs.readFileSync(path.join(examples, f))), {}, env);
-  fs.writeFileSync(path.join(examples, f.replace(/\.pdf$/, '-2up.pdf')), pdf);
+  const bytes = fs.readFileSync(path.join(examples, f));
+  for (const [suffix, options] of [['-plain', { noTrim: true, keepCover: true, force: true }], ['-concur', {}]]) {
+    const { pdf } = await concur(new Uint8Array(bytes), options, env);
+    fs.writeFileSync(path.join(examples, f.replace(/\.pdf$/, `${suffix}.pdf`)), pdf);
+  }  fs.rmSync(path.join(examples, f));   // only the two versions are linked
 }
 
 // the scripting sandbox for PDF forms, which nothing here uses
