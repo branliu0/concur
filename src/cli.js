@@ -25,7 +25,6 @@ Print a PDF 2-up with margins trimmed.
       --paper NAME     letter, legal or a4 (default letter)
       --oversize MODE  1up (default) gives pages with a much wider block of
                        text a sheet of their own; 2up shrinks them in
-      --frame          draw a box around each page
   -f, --force          2-up even if the text would shrink a lot
       --min-scale F    skip unless text stays at least this size (default 0.85)
   -n, --dry-run        measure and report, but write nothing
@@ -46,7 +45,6 @@ try {
       scale: { type: 'string', short: 's' },
       paper: { type: 'string' },
       gutter: { type: 'string' },
-      frame: { type: 'boolean' },
       'dry-run': { type: 'boolean', short: 'n' },
       force: { type: 'boolean', short: 'f' },
       'min-scale': { type: 'string' },
@@ -81,7 +79,6 @@ const options = {
   scale: num('scale', DEFAULTS.scale),
   paper: v.paper ?? DEFAULTS.paper,
   gutter: num('gutter', DEFAULTS.gutter),
-  frame: !!v.frame,
   dryRun: !!v['dry-run'],
   force: !!v.force,
   minScale: num('min-scale', DEFAULTS.minScale),

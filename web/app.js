@@ -31,7 +31,6 @@ const options = () => ({
   keepEdges: !$('stamps').checked,
   keepCover: !$('cover').checked,
   oversize: $('oversize').checked ? '1up' : '2up',
-  frame: $('frame').checked,
 });
 
 // One file at a time: each takes a second or two of the main thread, and a

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="512" height="512">
+  <!-- the landscape sheet from the drop box, with two pages of text on it -->
+  <rect x="3" y="11" width="58" height="42" rx="5" fill="#fff" stroke="#22201c" stroke-width="4"/>
+  <g stroke="#6f6a60" stroke-width="3.2">
+    <path d="M11 20.5h17M11 27h17M11 33.5h17M11 40h17M11 46.5h12"/>
+    <path d="M36 20.5h17M36 27h17M36 33.5h17M36 40h17M36 46.5h12"/>
+  </g>
+</svg>

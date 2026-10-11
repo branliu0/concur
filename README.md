@@ -107,7 +107,6 @@ show whether a change moved anything; see `test/samples.js`.
 | `--gutter` | `36` | Gap between the two pages, pt |
 | `--paper` | `letter` | `letter`, `legal`, or `a4` |
 | `--oversize` | `1up` | `1up` gives pages with a much wider text block their own sheet; `2up` shrinks them in with the rest |
-| `--frame` | | Draw a box around each page |
 | `-f, --force` | | Make it even if the text would shrink a lot |
 | `--min-scale` | `0.85` | Skip threshold |
 | `-n, --dry-run` | | Measure and report without writing anything |

@@ -20,7 +20,7 @@ export const PAPER = {        // landscape sheet, w x h in points
 
 export const DEFAULTS = {
   noTrim: false, margin: 10.0, scale: 0.90, paper: 'letter', gutter: 36.0,
-  frame: false, dryRun: false, force: false, minScale: 0.85, sample: 40,
+  dryRun: false, force: false, minScale: 0.85, sample: 40,
   pct: 5.0, dpi: 50, oversize: '1up', keepEdges: false, keepCover: false, trim: null,
 };
 
@@ -764,7 +764,6 @@ async function run(bytes, a, pdfjsDoc, env, log) {
       // so the box lands there
       ops.push(`q ${f3(ox)} ${f3(oy)} ${f3(w)} ${f3(h)} re W n `
         + `${f5(s)} 0 0 ${f5(s)} ${f3(ox - s * b[0])} ${f3(oy - s * b[1])} cm /${name} Do Q`);
-      if (a.frame) ops.push(`q 0.5 w ${f3(ox)} ${f3(oy)} ${f3(w)} ${f3(h)} re S Q`);
       // The slug, kept once: drawn a second time from the first page, moved
       // down to just inside the top of the trimmed box when the page is blank
       // there (as an article's first page usually is), else just above it.
