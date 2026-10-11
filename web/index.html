@@ -72,9 +72,9 @@
     display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
     margin: 18px 2px 0; font-size: 14px; color: var(--dim);
   }
-  .examples + .examples { margin-top: 8px; }
+  .examples + .examples { margin-top: 14px; }
   .examples b { color: var(--fg); font-weight: 600; }
-  .examples .what { flex: 1 1 240px; }
+  .examples .what { flex: 1 0 100%; }
   #files { list-style: none; margin: 28px 0 0; padding: 0; display: grid; gap: 10px; }
   #files:empty { margin: 0; }
   #files li {
@@ -189,14 +189,14 @@
   <div class="examples">
     <span class="what">Example: <b>a Supreme Court opinion</b>,
       <a href="examples/obergefell.pdf" target="_blank"><i>Obergefell v. Hodges</i></a></span>
-    <a class="button" href="examples/obergefell-plain.pdf" target="_blank">The usual way</a>
-    <a class="button" href="examples/obergefell-concur.pdf" target="_blank">With concur</a>
+    <a class="button" href="examples/obergefell-plain.pdf" target="_blank">The usual way: text at __SCALE:obergefell-plain__</a>
+    <a class="button" href="examples/obergefell-concur.pdf" target="_blank">With concur: text at __SCALE:obergefell-concur__</a>
   </div>
   <div class="examples">
     <span class="what">Example: <b>a law review article</b>,
       <a href="examples/holmes.pdf" target="_blank">Holmes, <i>The Path of the Law</i></a></span>
-    <a class="button" href="examples/holmes-plain.pdf" target="_blank">The usual way</a>
-    <a class="button" href="examples/holmes-concur.pdf" target="_blank">With concur</a>
+    <a class="button" href="examples/holmes-plain.pdf" target="_blank">The usual way: text at __SCALE:holmes-plain__</a>
+    <a class="button" href="examples/holmes-concur.pdf" target="_blank">With concur: text at __SCALE:holmes-concur__</a>
   </div>
 
   <section>

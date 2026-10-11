@@ -29,18 +29,38 @@ for (const d of ['standard_fonts', 'cmaps', 'wasm', 'iccs']) cp(path.join(pdfjs,
 // per page the way a print dialog would, margins and all (filling the sheet
 // but for a printer's quarter-inch border), and with concur
 const examples = path.join(site, 'examples');
+const scales = {};   // how big the text comes out, for the page to quote
+const linked = new Set([...fs.readFileSync(path.join(site, 'index.html'), 'utf8')
+  .matchAll(/examples\/([\w-]+)\.pdf/g)].map((m) => m[1]));
 for (const f of fs.existsSync(examples) ? fs.readdirSync(examples) : []) {
-  if (!f.endsWith('.pdf')) continue;
+  const stem = f.replace(/\.pdf$/, '');
+  // only the originals the page links to; anything else in there stays out
+  if (!f.endsWith('.pdf') || !linked.has(stem)) {
+    fs.rmSync(path.join(examples, f));
+    continue;
+  }
   const bytes = fs.readFileSync(path.join(examples, f));
-  for (const [suffix, options] of [['-plain', { noTrim: true, scale: 0.95, gutter: 12, keepCover: true, force: true }], ['-concur', {}]]) {
-    const { pdf } = await concur(new Uint8Array(bytes), options, env);
-    fs.writeFileSync(path.join(examples, f.replace(/\.pdf$/, `${suffix}.pdf`)), pdf);
-  }}
+  for (const [suffix, options] of [
+    ['-plain', { noTrim: true, scale: 0.95, gutter: 12, keepCover: true, force: true }],
+    ['-concur', {}],
+  ]) {
+    const { pdf, scale } = await concur(new Uint8Array(bytes), options, env);
+    fs.writeFileSync(path.join(examples, `${stem}${suffix}.pdf`), pdf);
+    scales[stem + suffix] = `${Math.round(scale * 100)}%`;
+  }
+}
 
 // the scripting sandbox for PDF forms, which nothing here uses
 for (const f of fs.readdirSync(path.join(site, 'vendor/pdfjs/wasm'))) {
   if (f.startsWith('quickjs')) fs.rmSync(path.join(site, 'vendor/pdfjs/wasm', f));
 }
+
+// the page quotes each example's text size as __SCALE:name__
+const index = path.join(site, 'index.html');
+fs.writeFileSync(index, fs.readFileSync(index, 'utf8').replace(/__SCALE:([\w-]+)__/g, (m, name) => {
+  if (!scales[name]) throw new Error(`index.html quotes ${m}, but there is no such example`);
+  return scales[name];
+}));
 
 // a browser cannot resolve a package name, so name the files
 const vendored = { '@cantoo/pdf-lib': './vendor/pdf-lib.mjs', 'pdfjs-dist': './vendor/pdfjs/pdf.min.mjs' };
