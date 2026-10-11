@@ -31,7 +31,7 @@ Needs [Node](https://nodejs.org/).
 
 ```
 npm install
-node src/cli.js brief.pdf     # -> brief~2up.pdf, next to the original
+node src/cli.js brief.pdf     # -> brief~(2 per page).pdf, next to the original
 ```
 
 The `~` in the output name makes it sort right after the source in Finder.

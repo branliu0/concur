@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// concur brief.pdf   ->   brief~2up.pdf, next to the original
+// concur brief.pdf   ->   brief~(2 per page).pdf, next to the original
 //
 // The report goes to stderr and the output path to stdout; the exit status is
 // 1 when a file is skipped or fails.
@@ -93,7 +93,7 @@ const options = {
 
 const src = positionals[0];
 const { dir, name } = path.parse(src);
-const out = positionals[1] ?? path.join(dir, `${name}~2up.pdf`);
+const out = positionals[1] ?? path.join(dir, `${name}~(2 per page).pdf`);
 
 let bytes;
 try {

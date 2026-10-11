@@ -79,7 +79,7 @@ function add(file) {
       if (removed) return;   // taken away while it was being worked on
       if (url) URL.revokeObjectURL(url);
       url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
-      const name = file.name.replace(/\.pdf$/i, '') + '~2up.pdf';
+      const name = file.name.replace(/\.pdf$/i, '') + '~(2 per page).pdf';
       const small = scale < DEFAULTS.minScale;
       row.className = small ? 'small' : 'ok';
       status.textContent = `Text at ${pct(scale)} of its original size, on ${sheets} `

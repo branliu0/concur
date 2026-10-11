@@ -1,6 +1,6 @@
 .DS_Store
 __pycache__/
-*~2up.pdf
+*~(2 per page).pdf
 node_modules/
 _site/
 # your own PDFs to test against; see test/samples.js
