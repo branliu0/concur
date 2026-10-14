@@ -556,9 +556,11 @@ function formXObject(out, copier, page) {
 // canvas, for reading the text and measuring the margins.  log(message)
 // receives each line of the report.
 //
-// Returns { scale, pages, sheets, cover, pdf }: the source's page count, the
-// number of sheets they went onto, whose cover page was left out (or null),
-// and the new file's bytes (null on a dry run).  Throws ConcurError - with
+// Returns { scale, pages, sheets, cover, unmeasured, pdf }: how big the text
+// comes out, the source's page count, the number of sheets they went onto,
+// whose cover page was left out (or null), whether there was no text to
+// measure (so nothing was trimmed), and the new file's bytes (null on a dry
+// run).  Throws ConcurError - with
 // .skipped set when the file is fine but would shrink below minScale.
 export async function concur(bytes, options = {}, env = {}, log = () => {}) {
   let doc = null;
@@ -590,6 +592,13 @@ async function run(bytes, a, pdfjsDoc, env, log) {
     });
     marks = pages.map(printersMarks);
   } catch (e) {
+    if (/password/i.test(e.message)) {
+      throw new ConcurError('it is password-protected; open it, save a copy '
+        + 'without the password, and use that');
+    }
+    if (/no pdf header|failed to parse/i.test(e.message)) {
+      throw new ConcurError("it doesn't look like a PDF");
+    }
     throw new ConcurError(`could not read it as a PDF (${e.message})`);
   }
   if (!pages.length) throw new ConcurError('it has no pages');
@@ -614,9 +623,12 @@ async function run(bytes, a, pdfjsDoc, env, log) {
   // the whole document to fit itself, so pages of any less common size are set
   // aside: placed untrimmed, scaled only if they would overflow, and left out
   // of both calculations.
-  const usual = [median(kept.map((i) => sizes[i][0])), median(kept.map((i) => sizes[i][1]))];
-  const regularSize = (wh) => Math.abs(wh[0] - usual[0]) <= SIZE_TOL
-    && Math.abs(wh[1] - usual[1]) <= SIZE_TOL;
+  // The usual size is the commonest one, not a median: with Letter and A4
+  // half and half, a median is a size no page has.
+  const near = (p, q) => Math.abs(p[0] - q[0]) <= SIZE_TOL && Math.abs(p[1] - q[1]) <= SIZE_TOL;
+  const count = (i) => kept.filter((j) => near(sizes[i], sizes[j])).length;
+  const usual = sizes[kept.reduce((best, i) => (count(i) > count(best) ? i : best))];
+  const regularSize = (wh) => near(wh, usual);
   const regular = [], oddSized = [];
   kept.forEach((i) => (regularSize(sizes[i]) ? regular : oddSized).push(i));
   if (oddSized.length) {
@@ -624,7 +636,8 @@ async function run(bytes, a, pdfjsDoc, env, log) {
     const shown = oddSized.slice(0, 4).map((i) => i + 1).join(', ');
     const more = n > 4 ? ` and ${n - 4} more` : '';
     log(`page${plural(n, '', 's')} ${shown}${more} ${plural(n, 'is', 'are')} not `
-      + `${round(usual[0])}x${round(usual[1])}pt (a cover page?); placing untrimmed`);
+      + `${round(usual[0])}x${round(usual[1])}pt${n * 4 > kept.length ? '' : ' (a cover page?)'}; `
+      + 'placing untrimmed');
   }
 
   // content margins per parity: {1: odd pages, 0: even pages}
@@ -632,6 +645,7 @@ async function run(bytes, a, pdfjsDoc, env, log) {
   let stamps = new Map(), slug = null;
   let oneUp = new Set();        // pages (0-based) to print one to a sheet
   let marg;
+  let unmeasured = false;       // nothing to measure: a blank or image-only file
   if (a.trim) {
     const v = (Array.isArray(a.trim) ? a.trim : String(a.trim).replace(/,/g, ' ').trim().split(/\s+/))
       .map(Number);
@@ -663,7 +677,8 @@ async function run(bytes, a, pdfjsDoc, env, log) {
       log(`could not render it to measure (${e.message})`);
     }
     if (!measured) {
-      log('could not measure content; falling back to no trim');
+      unmeasured = true;
+      log('could not find any text to measure; falling back to no trim');
       marg = { 1: [0, 0, 0, 0], 0: [0, 0, 0, 0] };
     } else {
       raw = measured;
@@ -722,16 +737,25 @@ async function run(bytes, a, pdfjsDoc, env, log) {
     return b;
   };
   const fit = (b, w = cellW, h = cellH) => Math.min(w / (b[2] - b[0]), h / (b[3] - b[1]));
-  // one scale for the document, set by the worse-fitting parity of a regular page
+  // one scale for the document, set by whichever regular page fits worst
   const paired = regular.filter((i) => !oneUp.has(i));
-  const scale = paired.length ? Math.min(...paired.slice(0, 2).map((i) => fit(box(i)))) : 1.0;
-  log(`text ends at ~${pct(scale)} of original size`);
-  if (scale < a.minScale && !a.force) {
-    throw new ConcurError(`skipping - only ${pct(scale)} of original size `
-      + `(margins too small to reclaim; threshold ${pct(a.minScale)}). `
-      + 'Use --force or lower --min-scale to override.', { skipped: true, scale });
+  const scale = paired.length ? Math.min(...paired.map((i) => fit(box(i)))) : 1.0;
+  // What to report: a stray page of another size (a cover, a fold-out) is
+  // not what the reader is printing for, but when a good share of the pages
+  // are another size, how small they come out counts too.
+  let size = scale;
+  if (oddSized.length * 4 > kept.length) {
+    size = Math.min(scale, ...oddSized.map((i) => fit(box(i))));
   }
-  if (a.dryRun) return { scale, pages: pages.length, sheets: 0, cover, pdf: null };
+  log(`text ends at ~${pct(size)} of original size`);
+  if (size < a.minScale && !a.force) {
+    const why = unmeasured ? 'no text found to measure, so the margins stay'
+      : 'margins too small to reclaim';
+    throw new ConcurError(`skipping - only ${pct(size)} of original size `
+      + `(${why}; threshold ${pct(a.minScale)}). `
+      + 'Use --force or lower --min-scale to override.', { skipped: true, scale: size });
+  }
+  if (a.dryRun) return { scale: size, pages: pages.length, sheets: 0, cover, unmeasured, pdf: null };
 
   // pair the pages up, giving each 1-up page a sheet of its own
   const plan = [];
@@ -795,7 +819,7 @@ async function run(bytes, a, pdfjsDoc, env, log) {
   // no object streams: they need PDF 1.5, and the oldest printer firmware
   // this has to get through is fussier than any viewer
   return {
-    scale, pages: pages.length, sheets: plan.length, cover,
+    scale: size, pages: pages.length, sheets: plan.length, cover, unmeasured,
     pdf: await out.save({ useObjectStreams: false }),
   };
 }
