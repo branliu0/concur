@@ -103,16 +103,19 @@ for (const f of ['core.js', 'app.js']) {
   fs.writeFileSync(path.join(site, f), js);
 }
 
-// the service worker's list of everything to keep for offline use, and a
-// version that changes whenever any of it does
-const files = fs.readdirSync(site, { recursive: true, withFileTypes: true })
+// What the service worker saves on the first visit, and a version that
+// changes whenever any file of the site does. The examples are left out (they
+// are for looking at), and so are the fonts and character tables pdf.js only
+// fetches for PDFs that lack their own; those are saved when first fetched.
+const all = fs.readdirSync(site, { recursive: true, withFileTypes: true })
   .filter((d) => d.isFile() && d.name !== 'sw.js')
   .map((d) => path.relative(site, path.join(d.parentPath, d.name)).split(path.sep).join('/'))
-  // the examples are for looking at, not for working offline with
   .filter((f) => !f.startsWith('examples/'))
   .sort();
+const onDemand = /^vendor\/pdfjs\/(standard_fonts|cmaps)\//;
+const files = all.filter((f) => !onDemand.test(f));
 const hash = crypto.createHash('sha256');
-for (const f of files) hash.update(f).update(fs.readFileSync(path.join(site, f)));
+for (const f of all) hash.update(f).update(fs.readFileSync(path.join(site, f)));
 const sw = fs.readFileSync(path.join(site, 'sw.js'), 'utf8')
   .replace('__VERSION__', `concur-${hash.digest('hex').slice(0, 12)}`)
   .replace('__FILES__', JSON.stringify(['./', ...files.map((f) => `./${f}`)]));
