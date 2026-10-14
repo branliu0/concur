@@ -136,3 +136,10 @@ lives elsewhere.
 
 concur began as `pdf2page`, a Python script; it is in this repository's
 history up to the JavaScript port.
+
+## License
+
+The code is MIT-licensed; see `LICENSE`. The example PDFs in `web/examples/`
+are not covered by it: *Obergefell v. Hodges* is from the U.S. Reports, a work
+of the U.S. government, and Holmes's *The Path of the Law* is from JSTOR's
+Early Journal Content, free to share for non-commercial use.

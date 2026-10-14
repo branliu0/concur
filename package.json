@@ -1,6 +1,7 @@
 {
   "name": "concur",
   "version": "0.1.0",
+  "license": "MIT",
   "description": "Print a PDF 2-up, trimming dead margins so the text stays readable",
   "type": "module",
   "private": true,
