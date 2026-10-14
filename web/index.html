@@ -52,6 +52,14 @@
   }
   #drop:hover .choose { filter: brightness(1.12); }
   #drop .privacy { display: block; color: var(--dim); font-size: 14px; }
+  #drop .tap { display: none; }
+  /* a phone has nothing to drag from: just the button, until something is chosen */
+  @media (hover: none) and (pointer: coarse) {
+    #drop strong { display: none; }
+    #drop.got strong { display: block; }
+    #drop .drag { display: none; }
+    #drop .tap { display: inline; }
+  }
   #drop input { position: absolute; opacity: 0; pointer-events: none; }
   /* what it does, drawn in CSS: two pages with a small block of text in a
      lot of margin, then the same two blocks filling one sheet */
@@ -126,6 +134,8 @@
   /* the drop box acknowledges the drop */
   #drop.got { border-style: solid; border-color: var(--ok); }
   #drop.got strong { color: var(--ok); }
+  #drop.got.nope { border-color: var(--accent); }
+  #drop.got.nope strong { color: var(--accent); }
   @media (prefers-reduced-motion: reduce) {
     #files li, #files li.ok { animation: none; }
     #files li.working::after { animation-duration: 3s; }
@@ -184,7 +194,7 @@
       <div class="sheet"><i></i><i></i></div>
     </div>
     <strong>Drop PDFs here</strong>
-    <span class="choose">or choose files</span>
+    <span class="choose"><span class="drag">or choose files</span><span class="tap">Choose PDFs</span></span>
     <span class="privacy">Your files never leave this computer.</span>
     <input id="pick" type="file" accept="application/pdf,.pdf" multiple>
   </label>
@@ -204,7 +214,7 @@
       <label><input type="checkbox" id="stamps" checked>
         Ignore download stamps (JSTOR, HeinOnline, Oxford, Cambridge, SSRN)</label>
       <label><input type="checkbox" id="oversize" checked>
-        Give pages with a much wider text block a sheet of their own</label>
+        Print pages with much wider text, like tables, on a sheet of their own</label>
     </div>
   </details>
 
@@ -282,7 +292,7 @@
     <h2>Need help, or have a suggestion?</h2>
     <p>Email me at <a href="mailto:brandon.liu@nyu.edu">brandon.liu@nyu.edu</a>.</p>
     <p>concur is open source: <a href="https://github.com/branliu0/concur" target="_blank" rel="noopener">the code is on GitHub</a>.</p>
-    <p>This software and website was developed with the assistance of AI.</p>
+    <p>This software and website were developed with the assistance of AI.</p>
   </section>
 </main>
 <script type="module" src="./app.js"></script>
