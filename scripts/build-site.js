@@ -8,14 +8,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PDFDocument, decodePDFRawStream } from '@cantoo/pdf-lib';
-import { concur } from '../src/core.js';
+import { concur, sizeWords } from '../src/core.js';
 import { env } from '../src/node-env.js';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const pkg = (name) => path.join(root, 'node_modules', name);
 const site = path.join(root, '_site');
 const cp = (from, to) => fs.cpSync(from, path.join(site, to), { recursive: true });
-const pct = (x) => `${Math.round(x * 100)}%`;
 
 // How much a print dialog shrank the pages: macOS draws each one inside
 // "q s 0 0 s x y cm ... Q", so take the commonest such s on the sheets.
@@ -36,6 +35,18 @@ async function printedScale(bytes) {
   return Number([...counts].sort((a, b) => b[1] - a[1])[0][0]);
 }
 
+// A picture of an example's third sheet, past the title page and into the
+// body text, at twice the width the page shows it.
+async function thumbnail(bytes, name, width = 640) {
+  const doc = await env.openPdfjs(new Uint8Array(bytes));
+  const page = await doc.getPage(Math.min(3, doc.numPages));
+  const viewport = page.getViewport({ scale: width / page.getViewport({ scale: 1 }).width });
+  const canvas = env.createCanvas(Math.round(viewport.width), Math.round(viewport.height));
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport, canvas }).promise;
+  fs.writeFileSync(path.join(site, 'examples', `${name}.jpg`), canvas.toBuffer('image/jpeg', 82));
+  await doc.loadingTask.destroy();
+}
+
 fs.rmSync(site, { recursive: true, force: true });
 cp(path.join(root, 'web'), '.');
 cp(path.join(root, 'src/core.js'), 'core.js');
@@ -48,8 +59,9 @@ for (const f of ['build/pdf.min.mjs', 'build/pdf.worker.min.mjs']) {
 for (const d of ['standard_fonts', 'cmaps', 'wasm', 'iccs']) cp(path.join(pdfjs, d), `vendor/pdfjs/${d}`);
 // Each example is shown two ways: printed two per page the usual way, made by
 // hand in a print dialog (<name>--manual.pdf), and with concur, made here.
+// The page shows a picture of one sheet of each, and how big the text comes out.
 const examples = path.join(site, 'examples');
-const scales = {};   // how big the text comes out, for the page to quote
+const sizes = {};
 const linked = new Set([...fs.readFileSync(path.join(site, 'index.html'), 'utf8')
   .matchAll(/examples\/([\w-]+)\.pdf/g)].map((m) => m[1]));
 for (const f of fs.existsSync(examples) ? fs.readdirSync(examples) : []) {
@@ -61,11 +73,13 @@ for (const f of fs.existsSync(examples) ? fs.readdirSync(examples) : []) {
   }
   const bytes = fs.readFileSync(path.join(examples, f));
   if (stem.endsWith('--manual')) {
-    scales[stem] = pct(await printedScale(bytes));
+    sizes[stem] = sizeWords(await printedScale(bytes));
+    await thumbnail(bytes, stem);
   } else if (linked.has(`${stem}-concur`)) {
     const { pdf, scale } = await concur(new Uint8Array(bytes), {}, env);
     fs.writeFileSync(path.join(examples, `${stem}-concur.pdf`), pdf);
-    scales[`${stem}-concur`] = pct(scale);
+    sizes[`${stem}-concur`] = sizeWords(scale);
+    await thumbnail(pdf, `${stem}-concur`);
   }
 }
 
@@ -74,11 +88,11 @@ for (const f of fs.readdirSync(path.join(site, 'vendor/pdfjs/wasm'))) {
   if (f.startsWith('quickjs')) fs.rmSync(path.join(site, 'vendor/pdfjs/wasm', f));
 }
 
-// the page quotes each example's text size as __SCALE:name__
+// the page quotes each example's text size as __SIZE:name__
 const index = path.join(site, 'index.html');
-fs.writeFileSync(index, fs.readFileSync(index, 'utf8').replace(/__SCALE:([\w-]+)__/g, (m, name) => {
-  if (!scales[name]) throw new Error(`index.html quotes ${m}, but there is no such example`);
-  return scales[name];
+fs.writeFileSync(index, fs.readFileSync(index, 'utf8').replace(/__SIZE:([\w-]+)__/g, (m, name) => {
+  if (!sizes[name]) throw new Error(`index.html quotes ${m}, but there is no such example`);
+  return sizes[name];
 }));
 
 // a browser cannot resolve a package name, so name the files

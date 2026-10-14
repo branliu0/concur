@@ -68,13 +68,19 @@
   details.options .grid { display: grid; gap: 8px; padding: 12px 0 0 2px; color: var(--fg); }
   details.options label { display: flex; gap: 8px; align-items: center; }
   select { font: inherit; }
-  .examples {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-    margin: 18px 2px 0; font-size: 14px; color: var(--dim);
+  .example { margin: 0; }
+  .example + .example { margin-top: 22px; }
+  .example figcaption { margin-bottom: 8px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .pair a { display: block; color: var(--dim); text-decoration: none; }
+  .pair img {
+    display: block; width: 100%; aspect-ratio: 11 / 8.5; object-fit: cover;
+    border: 1px solid var(--line); border-radius: 4px; background: #fff;
+    box-shadow: 0 1px 3px rgb(0 0 0 / .08); transition: border-color .15s;
   }
-  .examples + .examples { margin-top: 14px; }
-  .examples b { color: var(--fg); font-weight: 600; }
-  .examples .what { flex: 1 0 100%; }
+  .pair a:hover img { border-color: var(--accent); }
+  .pair b { display: block; margin-top: 7px; color: var(--fg); font-weight: 600; }
+  .pair .good { color: var(--ok); }
   #files { list-style: none; margin: 28px 0 0; padding: 0; display: grid; gap: 10px; }
   #files:empty { margin: 0; }
   #files li {
@@ -186,18 +192,39 @@
 
   <ul id="files"></ul>
 
-  <div class="examples">
-    <span class="what">Example: <b>a Supreme Court opinion</b>,
-      <a href="examples/obergefell.pdf" target="_blank"><i>Obergefell v. Hodges</i></a></span>
-    <a class="button" href="examples/obergefell--manual.pdf" target="_blank">The usual way: text at __SCALE:obergefell--manual__</a>
-    <a class="button" href="examples/obergefell-concur.pdf" target="_blank">With concur: text at __SCALE:obergefell-concur__</a>
-  </div>
-  <div class="examples">
-    <span class="what">Example: <b>a law review article</b>,
-      <a href="examples/holmes.pdf" target="_blank">Holmes, <i>The Path of the Law</i></a></span>
-    <a class="button" href="examples/holmes--manual.pdf" target="_blank">The usual way: text at __SCALE:holmes--manual__</a>
-    <a class="button" href="examples/holmes-concur.pdf" target="_blank">With concur: text at __SCALE:holmes-concur__</a>
-  </div>
+  <section class="examples">
+    <h2>See the difference</h2>
+    <figure class="example">
+      <figcaption>A Supreme Court opinion: <a href="examples/obergefell.pdf" target="_blank"><i>Obergefell v. Hodges</i></a></figcaption>
+      <div class="pair">
+        <a href="examples/obergefell--manual.pdf" target="_blank">
+          <img src="examples/obergefell--manual.jpg" alt="A sheet printed 2 per page the usual way" loading="lazy">
+          <b>Printed 2 per page</b>
+          <span>Text __SIZE:obergefell--manual__</span>
+        </a>
+        <a href="examples/obergefell-concur.pdf" target="_blank">
+          <img src="examples/obergefell-concur.jpg" alt="The same sheet made with concur" loading="lazy">
+          <b>With concur</b>
+          <span class="good">Text __SIZE:obergefell-concur__</span>
+        </a>
+      </div>
+    </figure>
+    <figure class="example">
+      <figcaption>A law review article: <a href="examples/holmes.pdf" target="_blank">Holmes, <i>The Path of the Law</i></a></figcaption>
+      <div class="pair">
+        <a href="examples/holmes--manual.pdf" target="_blank">
+          <img src="examples/holmes--manual.jpg" alt="A sheet printed 2 per page the usual way" loading="lazy">
+          <b>Printed 2 per page</b>
+          <span>Text __SIZE:holmes--manual__</span>
+        </a>
+        <a href="examples/holmes-concur.pdf" target="_blank">
+          <img src="examples/holmes-concur.jpg" alt="The same sheet made with concur" loading="lazy">
+          <b>With concur</b>
+          <span class="good">Text __SIZE:holmes-concur__</span>
+        </a>
+      </div>
+    </figure>
+  </section>
 
   <section>
     <h2>Your files stay with you</h2>

@@ -71,6 +71,13 @@ export class ConcurError extends Error {
   }
 }
 
+// How big the text comes out, in words a reader takes in at once: "at full
+// size" or "39% smaller", rather than a percentage of the original.
+export function sizeWords(scale) {
+  const smaller = 100 - Math.round(scale * 100);
+  return smaller <= 0 ? 'at full size' : `${smaller}% smaller`;
+}
+
 // Python's round(): halves go to the even neighbour.  Kept so the numbers
 // reported match the original implementation's exactly.
 function round(x) {

@@ -1,6 +1,6 @@
 // The web page: runs core.js on dropped files, entirely in the browser.
 import * as pdfjs from 'pdfjs-dist';
-import { DEFAULTS, ConcurError, concur } from './core.js';
+import { DEFAULTS, ConcurError, concur, sizeWords } from './core.js';
 
 const vendor = new URL('./vendor/pdfjs/', import.meta.url).href;
 pdfjs.GlobalWorkerOptions.workerSrc = vendor + 'pdf.worker.min.mjs';
@@ -24,8 +24,6 @@ const el = (tag, props = {}, ...kids) => {
   e.append(...kids);
   return e;
 };
-const pct = (x) => `${Math.round(x * 100)}%`;
-
 const options = () => ({
   paper: $('paper').value,
   keepEdges: !$('stamps').checked,
@@ -82,7 +80,7 @@ function add(file) {
       const name = file.name.replace(/\.pdf$/i, '') + '~(2 per page).pdf';
       const small = scale < DEFAULTS.minScale;
       row.className = small ? 'small' : 'ok';
-      status.textContent = `Text at ${pct(scale)} of its original size, on ${sheets} `
+      status.textContent = `Text ${sizeWords(scale)}, on ${sheets} `
         + `page${sheets === 1 ? '' : 's'} (was ${pages}).`;
       if (small) {
         status.append(el('div', { className: 'warning', textContent: 'Small print: this one has '
