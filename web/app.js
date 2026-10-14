@@ -72,7 +72,7 @@ function add(file) {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       // always make it: a file that comes out small gets a warning, not a refusal
-      const { scale, pages, sheets, cover, pdf } = await concur(bytes,
+      const { scale, pages, sheets, cover, unmeasured, pdf } = await concur(bytes,
         { ...options(), ...override, force: true }, env, (m) => lines.push(m));
       if (removed) return;   // taken away while it was being worked on
       if (url) URL.revokeObjectURL(url);
@@ -83,8 +83,10 @@ function add(file) {
       status.textContent = `Text ${sizeWords(scale)}, on ${sheets} `
         + `page${sheets === 1 ? '' : 's'} (was ${pages}).`;
       if (small) {
-        status.append(el('div', { className: 'warning', textContent: 'Small print: this one has '
-          + 'little margin to trim, and may read better printed normally.' }));
+        status.append(el('div', { className: 'warning', textContent: unmeasured
+          ? 'Small print: no text could be found to measure (a blank or unusual scan?), '
+            + 'so the margins were left as they are.'
+          : 'Small print: this one has little margin to trim, and may read better printed normally.' }));
       }
       actions.append(
         el('a', { className: 'button primary', href: url, download: name, textContent: 'Download' }),
@@ -122,11 +124,15 @@ const addAll = (files) => {
   pdfs.forEach(add);
   // say so on the box itself, where the eye already is
   drop.classList.add('got');
+  drop.classList.toggle('nope', !pdfs.length);
   prompt.textContent = pdfs.length
     ? `Got ${pdfs.length === 1 ? 'it' : `${pdfs.length} PDFs`} — working below`
     : 'That wasn’t a PDF';
   clearTimeout(gotTimer);
-  gotTimer = setTimeout(() => { drop.classList.remove('got'); prompt.textContent = promptText; }, 2000);
+  gotTimer = setTimeout(() => {
+    drop.classList.remove('got', 'nope');
+    prompt.textContent = promptText;
+  }, 2000);
   if (pdfs.length) $('files').firstElementChild.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 };
 
