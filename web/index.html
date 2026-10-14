@@ -70,16 +70,18 @@
   select { font: inherit; }
   .example { margin: 0; }
   .example + .example { margin-top: 22px; }
-  .example figcaption { margin-bottom: 8px; }
+  .example figcaption { margin-bottom: 10px; }
+  .example figcaption a { color: var(--fg); font-weight: 600; }
   .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .pair a { display: block; color: var(--dim); text-decoration: none; }
+  .pair a { display: block; color: var(--dim); text-align: center; text-decoration: none; }
   .pair img {
     display: block; width: 100%; aspect-ratio: 11 / 8.5; object-fit: cover;
     border: 1px solid var(--line); border-radius: 4px; background: #fff;
     box-shadow: 0 1px 3px rgb(0 0 0 / .08); transition: border-color .15s;
   }
   .pair a:hover img { border-color: var(--accent); }
-  .pair b { display: block; margin-top: 7px; color: var(--fg); font-weight: 600; }
+  .pair b { display: block; color: var(--fg); font-weight: 600; }
+  .pair span { display: block; margin-bottom: 6px; }
   .pair .good { color: var(--ok); }
   #files { list-style: none; margin: 28px 0 0; padding: 0; display: grid; gap: 10px; }
   #files:empty { margin: 0; }
@@ -194,33 +196,37 @@
 
   <section class="examples">
     <h2>See the difference</h2>
+    <p>The same pages, printed two to a sheet. Click a picture to open the whole PDF,
+    or a title for the original.</p>
     <figure class="example">
-      <figcaption>A Supreme Court opinion: <a href="examples/obergefell.pdf" target="_blank"><i>Obergefell v. Hodges</i></a></figcaption>
+      <figcaption><a href="examples/obergefell.pdf" target="_blank"><i>Obergefell v. Hodges</i></a>,
+        a Supreme Court opinion</figcaption>
       <div class="pair">
         <a href="examples/obergefell--manual.pdf" target="_blank">
-          <img src="examples/obergefell--manual.jpg" alt="A sheet printed 2 per page the usual way" loading="lazy">
           <b>Printed 2 per page</b>
           <span>Text __SIZE:obergefell--manual__</span>
+          <img src="examples/obergefell--manual.jpg" alt="A sheet printed 2 per page the usual way" loading="lazy">
         </a>
         <a href="examples/obergefell-concur.pdf" target="_blank">
-          <img src="examples/obergefell-concur.jpg" alt="The same sheet made with concur" loading="lazy">
           <b>With concur</b>
           <span class="good">Text __SIZE:obergefell-concur__</span>
+          <img src="examples/obergefell-concur.jpg" alt="The same sheet made with concur" loading="lazy">
         </a>
       </div>
     </figure>
     <figure class="example">
-      <figcaption>A law review article: <a href="examples/holmes.pdf" target="_blank">Holmes, <i>The Path of the Law</i></a></figcaption>
+      <figcaption><a href="examples/holmes.pdf" target="_blank">Holmes, <i>The Path of the Law</i></a>,
+        a law review article</figcaption>
       <div class="pair">
         <a href="examples/holmes--manual.pdf" target="_blank">
-          <img src="examples/holmes--manual.jpg" alt="A sheet printed 2 per page the usual way" loading="lazy">
           <b>Printed 2 per page</b>
           <span>Text __SIZE:holmes--manual__</span>
+          <img src="examples/holmes--manual.jpg" alt="A sheet printed 2 per page the usual way" loading="lazy">
         </a>
         <a href="examples/holmes-concur.pdf" target="_blank">
-          <img src="examples/holmes-concur.jpg" alt="The same sheet made with concur" loading="lazy">
           <b>With concur</b>
           <span class="good">Text __SIZE:holmes-concur__</span>
+          <img src="examples/holmes-concur.jpg" alt="The same sheet made with concur" loading="lazy">
         </a>
       </div>
     </figure>
