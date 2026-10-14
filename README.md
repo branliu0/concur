@@ -13,9 +13,10 @@ prints close to its original size on half the paper.
 
 ## The web page
 
-`web/` is a page that does all of this in the browser: drop PDFs on it and
-download the results. Files are never uploaded, it keeps working offline once
-loaded, and its Content-Security-Policy stops it contacting any other site.
+**https://branliu0.github.io/concur/** does all of this in the browser: drop
+PDFs on it and download the results. Files are never uploaded, it keeps working
+offline once loaded, and its Content-Security-Policy stops it contacting any
+other site. Its source is `web/`.
 
 ```
 npm install

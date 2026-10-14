@@ -107,8 +107,5 @@ fs.writeFileSync(path.join(site, 'sw.js'), sw);
 // stop GitHub Pages running the site through Jekyll
 fs.writeFileSync(path.join(site, '.nojekyll'), '');
 console.log(`built ${path.relative(root, site)}/`);
-if (fs.readFileSync(path.join(site, 'index.html'), 'utf8').includes('id="source" href="#"')) {
-  console.log('reminder: the GitHub link in web/index.html is still a placeholder');
-}
 // pdf.js keeps a worker alive that would otherwise hold the process open
 process.exit(0);
