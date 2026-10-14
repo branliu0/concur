@@ -40,7 +40,9 @@ The page and the command line run the same code, `src/core.js`: pdf.js renders
 the pages and reads their text, pdf-lib does the layout.
 
 `npm test` dry-runs your own PDFs in `samples/` against a recorded report, to
-show whether a change moved anything; see `test/samples.js`.
+show whether a change moved anything; see `test/samples.js`. `npm run
+test:examples` does the same for the web page's two public examples, and the
+GitHub workflow runs it before publishing.
 
 ## How it decides
 

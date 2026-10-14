@@ -1,0 +1,7 @@
+== holmes.pdf
+concur: page 1 is a JSTOR cover page; leaving it out (--keep-cover to keep it)
+concur: auto trim  odd L30 B29 R32 T26  even L30 B25 R29 T26
+concur: text ends at ~98% of original size
+== obergefell.pdf
+concur: auto trim  L150 B134 R144 T111
+concur: text ends at ~101% of original size

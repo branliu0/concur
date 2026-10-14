@@ -1,18 +1,25 @@
-// Dry-runs every PDF in samples/ and compares the report with
-// samples/expected-js.txt.  samples/ is not in git: put your own PDFs there,
-// run with --update once to record what they report, and after that a plain
-// run shows whether a change moved any of them.
+// Dry-runs a set of PDFs and compares what each reports with what was
+// recorded, so a change that moves any of them shows up.
 //
-//   npm test             compare
-//   npm test -- --update record what it reports now
+// The default set is samples/, which is not in git: put your own PDFs there
+// and run with --update once to record them. --examples runs the web page's
+// two public examples instead, recorded in test/examples-expected.txt; that is
+// the set GitHub checks before publishing.
+//
+//   npm test                         compare samples/
+//   npm test -- --update             record what samples/ reports now
+//   npm test -- --examples [--update]  the same for the examples
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const dir = path.join(root, 'samples');
-const expectedFile = path.join(dir, 'expected-js.txt');
+const examples = process.argv.includes('--examples');
+const dir = path.join(root, examples ? 'web/examples' : 'samples');
+const expectedFile = examples ? path.join(root, 'test/examples-expected.txt')
+  : path.join(dir, 'expected-js.txt');
+const where = path.relative(root, expectedFile);
 
 const report = (name) => {
   const r = spawnSync(process.execPath, [path.join(root, 'src/cli.js'), '-n', path.join(dir, name)],
@@ -22,19 +29,21 @@ const report = (name) => {
 
 if (process.argv.includes('--update')) {
   const names = fs.existsSync(dir)
-    ? fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.pdf')).sort() : [];
+    ? fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.pdf'))
+      // an example's hand-made 2-per-page version is not concur's to measure
+      .filter((f) => !f.includes('--manual')).sort() : [];
   if (!names.length) {
-    console.log('no PDFs in samples/ to record');
+    console.log(`no PDFs in ${path.relative(root, dir)}/ to record`);
     process.exit(1);
   }
   fs.writeFileSync(expectedFile, names.map((n) => `== ${n}\n${report(n)}\n`).join(''));
-  console.log(`wrote ${names.length} reports to samples/expected-js.txt`);
+  console.log(`wrote ${names.length} reports to ${where}`);
   process.exit(0);
 }
 
 if (!fs.existsSync(expectedFile)) {
-  console.log('nothing to compare: no samples/expected-js.txt (see the top of this file)');
-  process.exit(0);
+  console.log(`nothing to compare: no ${where} (see the top of this file)`);
+  process.exit(examples ? 1 : 0);
 }
 const expected = new Map();
 for (const chunk of fs.readFileSync(expectedFile, 'utf8').split(/^== /m).slice(1)) {
@@ -45,7 +54,7 @@ for (const chunk of fs.readFileSync(expectedFile, 'utf8').split(/^== /m).slice(1
 let failed = 0, missing = 0;
 for (const [name, want] of expected) {
   if (!fs.existsSync(path.join(dir, name))) {
-    console.log(`?  ${name} (not in samples/)`);
+    console.log(`?  ${name} (not in ${path.relative(root, dir)}/)`);
     missing++;
     continue;
   }
@@ -64,4 +73,4 @@ for (const [name, want] of expected) {
   }
 }
 console.log(`\n${expected.size - failed - missing} ok, ${failed} differ, ${missing} missing`);
-process.exit(failed ? 1 : 0);
+process.exit(failed || (examples && missing) ? 1 : 0);
