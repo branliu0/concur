@@ -35,15 +35,23 @@
   }
   .lede { margin: 0 0 28px; color: var(--dim); }
   .lede strong { display: block; color: var(--fg); font-weight: 600; }
+  /* the one thing to do here, so it gets the colour, the size and a button */
   #drop {
-    display: block; padding: 40px 20px; text-align: center; cursor: pointer;
-    border: 1.5px dashed var(--line); border-radius: 10px; background: var(--card);
+    display: block; padding: 40px 20px 34px; text-align: center; cursor: pointer;
+    border: 2px dashed color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: 14px;
+    background: color-mix(in srgb, var(--accent) 5%, var(--card));
     transition: border-color .15s, background .15s;
   }
   #drop:hover, #drop.over, #drop:focus-within { border-color: var(--accent); }
-  #drop.over { background: color-mix(in srgb, var(--accent) 7%, var(--card)); }
-  #drop strong { display: block; font-size: 17px; }
-  #drop span { color: var(--dim); font-size: 14px; }
+  #drop.over { background: color-mix(in srgb, var(--accent) 10%, var(--card)); }
+  #drop strong { display: block; font-size: 21px; }
+  #drop .choose {
+    display: inline-block; margin: 14px 0 12px; padding: 9px 24px; border-radius: 8px;
+    background: var(--accent); color: var(--card); font-weight: 600;
+    transition: filter .15s;
+  }
+  #drop:hover .choose { filter: brightness(1.12); }
+  #drop .privacy { display: block; color: var(--dim); font-size: 14px; }
   #drop input { position: absolute; opacity: 0; pointer-events: none; }
   /* what it does, drawn in CSS: two pages with a small block of text in a
      lot of margin, then the same two blocks filling one sheet */
@@ -72,16 +80,16 @@
   .example + .example { margin-top: 22px; }
   .example figcaption { margin-bottom: 10px; text-align: center; }
   .example figcaption a { color: var(--fg); font-weight: 600; }
-  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 520px; margin: 0 auto; }
   .pair a { display: block; color: var(--dim); text-align: center; text-decoration: none; }
   .pair img {
     display: block; width: 100%; aspect-ratio: 11 / 8.5; object-fit: cover;
     border: 1px solid var(--line); border-radius: 4px; background: #fff;
-    box-shadow: 0 1px 3px rgb(0 0 0 / .08); transition: border-color .15s;
+    transition: border-color .15s;
   }
   .pair a:hover img { border-color: var(--accent); }
-  .pair b { display: block; color: var(--fg); font-weight: 600; }
-  .pair span { display: block; margin-bottom: 6px; }
+  .pair b { display: block; color: var(--fg); font-weight: 600; font-size: 13px; }
+  .pair span { display: block; margin-bottom: 6px; font-size: 13px; }
   .pair .good { color: var(--ok); }
   #files { list-style: none; margin: 28px 0 0; padding: 0; display: grid; gap: 10px; }
   #files:empty { margin: 0; }
@@ -165,8 +173,9 @@
       <span class="arrow">&rarr;</span>
       <div class="sheet"><i></i><i></i></div>
     </div>
-    <strong>Drop PDFs here, or click to choose</strong>
-    <span>Your files never leave this computer.</span>
+    <strong>Drop PDFs here</strong>
+    <span class="choose">or choose files</span>
+    <span class="privacy">Your files never leave this computer.</span>
     <input id="pick" type="file" accept="application/pdf,.pdf" multiple>
   </label>
 
