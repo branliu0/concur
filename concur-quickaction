@@ -4,11 +4,13 @@
 # Services are launched by launchd with a bare PATH, so node (/opt/homebrew/bin)
 # has to be put back before concur can run.  Quick Actions also swallow stdout
 # and stderr, and notifications posted from a service are silently dropped, so
-# every run ends in a dialog: success offers to open the result, a skip offers
-# to make it anyway (--force), and a failure shows concur's own stderr.
+# every run ends in a dialog: success offers to open the result, and a failure
+# shows concur's own stderr.  A file is always made (--force), and warned about
+# when its text comes out smaller than SMALL percent of the original.
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 CONCUR="$HOME/bin/concur"
+SMALL=85
 
 dialog() {        # title message button...  -> prints the button clicked
   osascript -e 'on run argv' \
@@ -18,13 +20,14 @@ dialog() {        # title message button...  -> prints the button clicked
             -e 'end run' -- "$@" 2>/dev/null
 }
 
-typeset -a ok_in ok_out skipped failed report
+typeset -a ok_in ok_out failed report
+typeset -i small=0
 
 run() {           # file [extra args] - runs concur and records the outcome
   local f=$1; shift
   local base=${f:t} errfile out rc msg
   errfile=$(mktemp -t concur)
-  out=$("$CONCUR" "$@" "$f" 2>"$errfile"); rc=$?
+  out=$("$CONCUR" --force "$@" "$f" 2>"$errfile"); rc=$?
   msg=$(<"$errfile"); rm -f "$errfile"
   local -a lines=("${(@f)msg}") m
   if (( rc == 0 )); then
@@ -35,11 +38,11 @@ run() {           # file [extra args] - runs concur and records the outcome
     (( $#m )) && detail+=", ${${m[1]#concur: }%% \(--oversize*}"
     m=("${(@M)lines:#*cover page*}")    # and a cover page left out
     (( $#m )) && detail+=", ${${m[1]#concur: }%% \(--keep-cover*}"
-    report+=("✓ $base -> ${out:t}  ($detail)")
-  elif [[ $msg == *"skipping"* ]]; then
-    skipped+=("$f")
-    m=("${(@M)lines:#*skipping*}")
-    report+=("– $base skipped: ${m[1]#concur: skipping - }")
+    local mark="✓" pctsize=${${(M)detail#*~<->%}##*~}
+    if [[ -n $pctsize ]] && (( ${pctsize%\%} < SMALL )); then
+      mark="⚠"; detail+=" - a little small"; small=1
+    fi
+    report+=("$mark $base -> ${out:t}  ($detail)")
   else
     failed+=("$f")
     report+=("✗ $base failed:"$'\n'"${msg:-concur exited $rc with no output.}")
@@ -52,25 +55,18 @@ for f in "$@"; do run "$f"; done
 
 while true; do
   typeset -a buttons=()
-  (( $#skipped )) && buttons+=("Make anyway")
   (( $#ok_out == 1 )) && buttons+=("Open")
   (( $#ok_out > 1 )) && buttons+=("Open all")
   buttons+=("OK")
 
   title="concur"
   (( $# == 1 && $#ok_out )) && title="concur - done"
-  (( $# == 1 && $#skipped )) && title="concur - skipped"
+  (( small )) && title="concur - small text"
   (( $#failed )) && title="concur - failed"
 
   choice=$(dialog "$title" "${(pj:\n\n:)report}" "${buttons[@]}")
 
   case $choice in
-    "Make anyway")
-      local_skipped=("${skipped[@]}")
-      skipped=() report=()
-      ok_in=() ok_out=() failed=()
-      for f in "${local_skipped[@]}"; do run "$f" --force; done
-      ;;
     Open|"Open all")
       open "${ok_out[@]}"
       break ;;

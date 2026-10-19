@@ -130,8 +130,9 @@ Right-click one or more PDFs → **Quick Actions → concur 2-up**.
 3. Turn it on in **System Settings → General → Login Items & Extensions →
    Finder** (it won't show in the menu until you do).
 
-Every run ends in a dialog. **Open** opens the result, and when a file was
-skipped for being too small, **Make anyway** redoes it with `--force`. The
+Every run ends in a dialog. **Open** opens the result. Files are always made
+(the wrapper passes `--force`), and one whose text comes out under 85% of its
+original size is marked ⚠ rather than skipped. The
 wrapper expects `concur` at `~/bin/concur` and looks for node in
 `/opt/homebrew/bin` or `/usr/local/bin`; edit `concur-quickaction` if yours
 lives elsewhere.

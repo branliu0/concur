@@ -55,6 +55,9 @@ const DATE = new RegExp([
   '(?<![\\d:])\\d{1,2}:\\d{2}:\\d{2}(?![\\d:])',
 ].join('|'), 'i');
 
+// A word processor's file name, which a template can print without a date.
+const FILENAME = /\.(docx?|odt|pages|rtf)\s*$/i;
+
 // What the page a publisher puts in front of a download says about itself.
 // Matched, like STAMPS, with whitespace removed, and only against page 1.
 const COVERS = [
@@ -199,11 +202,12 @@ async function stampBoxes(doc, sample) {
   // saved ("Sprigman_Final_Review (Do Not Delete) 5/6/2019 11:50 AM").  What
   // gives it away is not its wording, which varies, but a date that stays the
   // same in the same place on every page: no running head does that, since a
-  // running head that never changes carries no date.
+  // running head that never changes carries no date.  A bare file name
+  // ("Beebe - Draft final.docx") gives it away the same way.
   let slug = null;
   const seen = new Map();
   for (const l of upright) {
-    if (!DATE.test(l.shown)) continue;
+    if (!DATE.test(l.shown) && !FILENAME.test(l.shown)) continue;
     // a line of a download stamp - JSTOR's carries the date it was downloaded
     const inStamp = (out.get(l.n) || []).some(([x0, y0, x1, y1]) => l.box[0] >= x0 - 1
       && l.box[1] >= y0 - 1 && l.box[2] <= x1 + 1 && l.box[3] <= y1 + 1);
