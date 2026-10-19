@@ -39,6 +39,9 @@ const STAMPS = new RegExp([
   'heinonline',
   'electronic copy available at',               // SSRN
   'terms of use,? available at',
+  'proquest ebook central',                     // ProQuest Ebook Central
+  'created from .{1,40} on \\d{4}-\\d\\d-\\d\\d',
+  'copyright ©\\d{4}.{1,60}all rights reserved',
 ].map((s) => s.replace(/ /g, '')).join('|'), 'i');
 
 // A date or a time of day: 5/6/2019, 2019-05-06, May 6, 2019, 11:50 AM,
