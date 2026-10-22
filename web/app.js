@@ -1,6 +1,6 @@
 // The web page: runs core.js on dropped files, entirely in the browser.
 import * as pdfjs from 'pdfjs-dist';
-import { DEFAULTS, ConcurError, concur, sizeWords } from './core.js';
+import { ConcurError, concur, sizeWords, fontWords } from './core.js';
 
 const vendor = new URL('./vendor/pdfjs/', import.meta.url).href;
 pdfjs.GlobalWorkerOptions.workerSrc = vendor + 'pdf.worker.min.mjs';
@@ -72,20 +72,22 @@ function add(file) {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       // always make it: a file that comes out small gets a warning, not a refusal
-      const { scale, pages, sheets, cover, unmeasured, pdf } = await concur(bytes,
+      const { scale, fonts, warning, pages, sheets, cover, unmeasured, pdf } = await concur(bytes,
         { ...options(), ...override, force: true }, env, (m) => lines.push(m));
       if (removed) return;   // taken away while it was being worked on
       if (url) URL.revokeObjectURL(url);
       url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
       const name = file.name.replace(/\.pdf$/i, '') + '~(2 per page).pdf';
-      const small = scale < DEFAULTS.minScale;
+      const small = !!warning;
       row.className = small ? 'small' : 'ok';
-      status.textContent = `Text ${sizeWords(scale)}, on ${sheets} `
-        + `page${sheets === 1 ? '' : 's'} (was ${pages}).`;
+      status.textContent = `${fonts ? fontWords(fonts).replace(/^t/, 'T') : `Text ${sizeWords(scale)}`}, `
+        + `on ${sheets} page${sheets === 1 ? '' : 's'} (was ${pages}).`;
       if (small) {
         status.append(el('div', { className: 'warning', textContent: unmeasured
           ? 'Small print: no text could be found to measure (a blank or unusual scan?), '
             + 'so the margins were left as they are.'
+          : fonts ? `Small print: the ${fonts.notes ? 'footnotes' : 'text'} will print at `
+            + `${+(fonts.notes || fonts.body).after.toFixed(1)} pt, and may read better printed normally.`
           : 'Small print: this one has little margin to trim, and may read better printed normally.' }));
       }
       actions.append(

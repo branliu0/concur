@@ -20,7 +20,7 @@ export const PAPER = {        // landscape sheet, w x h in points
 
 export const DEFAULTS = {
   noTrim: false, margin: 10.0, scale: 0.90, paper: 'letter', gutter: 36.0,
-  dryRun: false, force: false, minScale: 0.85, sample: 40,
+  dryRun: false, force: false, minScale: 0.85, minSize: 7.0, sample: 40,
   pct: 5.0, dpi: 50, oversize: '1up', keepEdges: false, keepCover: false, trim: null,
 };
 
@@ -82,6 +82,16 @@ export class ConcurError extends Error {
 export function sizeWords(scale) {
   const smaller = 100 - Math.round(scale * 100);
   return smaller <= 0 ? 'at full size' : `${smaller}% smaller`;
+}
+
+// "11 pt -> 8.9 pt, footnotes 9 pt -> 7.3 pt": what the text measured, and what
+// it comes out at.  `fonts` is what concur() returns, or null.
+export function fontWords(fonts) {
+  if (!fonts) return '';
+  const n = (x) => `${+x.toFixed(1)}`;
+  const one = (label, f) => `${label} ${n(f.before)} pt \u2192 ${n(f.after)} pt`;
+  return [one('text', fonts.body), fonts.notes && one('footnotes', fonts.notes)]
+    .filter(Boolean).join(', ');
 }
 
 // Python's round(): halves go to the even neighbour.  Kept so the numbers
@@ -225,6 +235,41 @@ async function stampBoxes(doc, sample) {
     break;
   }
   return { stamps: out, slug };
+}
+
+// How big the text is, in points: { body, notes } or null if there is none to
+// read.  Every run's size is counted once per character, so the body is the
+// size most of the text is set in and the notes are the smallest size that
+// carries a real share of it (footnote numbers and small-caps headings are too
+// few characters to count).  Stamps and the slug are left out, being small
+// print of their own on every page.
+async function textSizes(doc, pageNums, stamps, slug) {
+  const hist = new Map();
+  let total = 0;
+  for (const n of pageNums) {
+    const page = await doc.getPage(n);
+    const vp = page.getViewport({ scale: 1 });
+    const tc = await page.getTextContent();
+    const boxes = [...(stamps.get(n) || []), ...(slug?.boxes.has(n) ? [slug.boxes.get(n)] : [])];
+    for (const it of tc.items) {
+      const chars = (it.str || '').replace(/\s/g, '').length;
+      if (!chars) continue;
+      const t = mul(vp.transform, it.transform);
+      const size = Math.hypot(t[0], t[1]);
+      if (!(size >= 3)) continue;
+      const x = t[4] + (t[0] / size) * it.width / 2, y = t[5] + (t[1] / size) * it.width / 2;
+      if (boxes.some(([x0, y0, x1, y1]) => x >= x0 - 1 && x <= x1 + 1 && y >= y0 - 1 && y <= y1 + 1)) continue;
+      const key = Math.round(size * 2) / 2;
+      hist.set(key, (hist.get(key) || 0) + chars);
+      total += chars;
+    }
+    page.cleanup();
+  }
+  if (!total) return null;
+  const sizes = [...hist.keys()].sort((p, q) => p - q);
+  const body = sizes.reduce((best, k) => (hist.get(k) >= hist.get(best) ? k : best));
+  const notes = sizes.find((k) => hist.get(k) >= 0.03 * total);
+  return { body, notes: notes < body ? notes : null };
 }
 
 // Whose cover page page 1 is ("JSTOR", "HeinOnline"), or null if it is not one.
@@ -755,14 +800,45 @@ async function run(bytes, a, pdfjsDoc, env, log) {
     size = Math.min(scale, ...oddSized.map((i) => fit(box(i))));
   }
   log(`text ends at ~${pct(size)} of original size`);
-  if (size < a.minScale && !a.force) {
-    const why = unmeasured ? 'no text found to measure, so the margins stay'
-      : 'margins too small to reclaim';
-    throw new ConcurError(`skipping - only ${pct(size)} of original size `
-      + `(${why}; threshold ${pct(a.minScale)}). `
-      + 'Use --force or lower --min-scale to override.', { skipped: true, scale: size });
+
+  // The size the text is set in, before and after: what decides whether the
+  // 2-up copy can be read, which the shrink alone does not say (a 12pt
+  // document at 80% is fine, an 8pt one at 90% is not).
+  let fonts = null;
+  try {
+    const found = await textSizes(await pdfjsDoc(),
+      paired.map((i) => i + 1).filter((n) => n <= a.sample), stamps, slug);
+    if (found) {
+      const at = (before) => ({ before, after: before * size });
+      fonts = { body: at(found.body), notes: found.notes && at(found.notes) };
+      log(fontWords(fonts));
+    }
+  } catch {
+    // no readable text just means the shrink is all there is to go on
   }
-  if (a.dryRun) return { scale: size, pages: pages.length, sheets: 0, cover, unmeasured, pdf: null };
+
+  // With text sizes the smallest print has to come out legible; without them
+  // (a scan) all there is to go on is how much it shrank.
+  let warning = null;
+  const least = fonts ? fonts.notes || fonts.body : null;
+  const tooSmall = least ? least.after < a.minSize : size < a.minScale;
+  if (tooSmall) {
+    const what = least
+      ? `${fonts.notes ? 'footnotes' : 'text'} would print at ${+least.after.toFixed(1)} pt `
+        + `(threshold ${a.minSize} pt)`
+      : `only ${pct(size)} of original size (${unmeasured
+        ? 'no text found to measure, so the margins stay' : 'margins too small to reclaim'}; `
+        + `threshold ${pct(a.minScale)})`;
+    if (!a.force) {
+      throw new ConcurError(`skipping - ${what}. Use --force, or lower `
+        + `${least ? '--min-size' : '--min-scale'}, to override.`, { skipped: true, scale: size });
+    }
+    warning = what;
+    log(`warning - ${what}`);
+  }
+  if (a.dryRun) {
+    return { scale: size, fonts, warning, pages: pages.length, sheets: 0, cover, unmeasured, pdf: null };
+  }
 
   // pair the pages up, giving each 1-up page a sheet of its own
   const plan = [];
@@ -826,7 +902,7 @@ async function run(bytes, a, pdfjsDoc, env, log) {
   // no object streams: they need PDF 1.5, and the oldest printer firmware
   // this has to get through is fussier than any viewer
   return {
-    scale: size, pages: pages.length, sheets: plan.length, cover, unmeasured,
+    scale: size, fonts, warning, pages: pages.length, sheets: plan.length, cover, unmeasured,
     pdf: await out.save({ useObjectStreams: false }),
   };
 }

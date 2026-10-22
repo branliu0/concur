@@ -5,12 +5,11 @@
 # has to be put back before concur can run.  Quick Actions also swallow stdout
 # and stderr, and notifications posted from a service are silently dropped, so
 # every run ends in a dialog: success offers to open the result, and a failure
-# shows concur's own stderr.  A file is always made (--force), and warned about
-# when its text comes out smaller than SMALL percent of the original.
+# shows concur's own stderr.  A file is always made (--force); concur says when
+# its smallest print comes out below its threshold, and that is marked ⚠.
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 CONCUR="$HOME/bin/concur"
-SMALL=85
 
 dialog() {        # title message button...  -> prints the button clicked
   osascript -e 'on run argv' \
@@ -34,13 +33,16 @@ run() {           # file [extra args] - runs concur and records the outcome
     ok_in+=("$f"); ok_out+=("$out")
     m=("${(@M)lines:#*text ends at*}")
     local detail=${${m[1]#concur: }:-done}
+    m=("${(@M)lines:#concur: text <->*pt*}")     # the sizes, before and after
+    (( $#m )) && detail="${m[1]#concur: }; ${detail/text ends at/shrunk to}"
     m=("${(@M)lines:#*1-up*}")          # note pages that got a sheet to themselves
     (( $#m )) && detail+=", ${${m[1]#concur: }%% \(--oversize*}"
     m=("${(@M)lines:#*cover page*}")    # and a cover page left out
     (( $#m )) && detail+=", ${${m[1]#concur: }%% \(--keep-cover*}"
-    local mark="✓" pctsize=${${(M)detail#*~<->%}##*~}
-    if [[ -n $pctsize ]] && (( ${pctsize%\%} < SMALL )); then
-      mark="⚠"; detail+=" - a little small"; small=1
+    local mark="✓"
+    m=("${(@M)lines:#*warning - *}")
+    if (( $#m )); then
+      mark="⚠"; detail+=" - ${${m[1]#concur: warning - }}"; small=1
     fi
     report+=("$mark $base -> ${out:t}  ($detail)")
   else

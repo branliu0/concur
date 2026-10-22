@@ -26,7 +26,8 @@ Print a PDF 2-up with margins trimmed.
       --oversize MODE  1up (default) gives pages with a much wider block of
                        text a sheet of their own; 2up shrinks them in
   -f, --force          2-up even if the text would shrink a lot
-      --min-scale F    skip unless text stays at least this size (default 0.85)
+      --min-size PT    skip unless the smallest text prints at least this big (default 7)
+      --min-scale F    the same test by shrink, for files with no text to measure (default 0.85)
   -n, --dry-run        measure and report, but write nothing
       --sample N       pages to measure (default 40)
       --pct P          outlier trim percentile; 0 never clips (default 5)
@@ -48,6 +49,7 @@ try {
       'dry-run': { type: 'boolean', short: 'n' },
       force: { type: 'boolean', short: 'f' },
       'min-scale': { type: 'string' },
+      'min-size': { type: 'string' },
       sample: { type: 'string' },
       pct: { type: 'string' },
       dpi: { type: 'string' },
@@ -82,6 +84,7 @@ const options = {
   dryRun: !!v['dry-run'],
   force: !!v.force,
   minScale: num('min-scale', DEFAULTS.minScale),
+  minSize: num('min-size', DEFAULTS.minSize),
   sample: num('sample', DEFAULTS.sample),
   pct: num('pct', DEFAULTS.pct),
   dpi: num('dpi', DEFAULTS.dpi),

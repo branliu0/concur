@@ -91,9 +91,15 @@ GitHub workflow runs it before publishing.
    page's measured height moves around with its footnotes. Those sheets stay
    portrait, so the output mixes orientations — printers cope, and
    `--oversize 2up` turns it off.
-4. **Check it's worth it.** If the text would still end up below 85% of its
-   original size, the file is skipped: 1-up would read better. `--force`
-   overrides, `--min-scale` moves the threshold.
+4. **Check it's legible.** Read the size the text is set in (the commonest
+   size is the body; the smallest size with a real share of the characters is
+   the footnotes) and work out what it comes out at once shrunk, which is
+   reported as `text 11 pt → 8.9 pt, footnotes 9 pt → 7.3 pt`. If the smallest
+   print would come out under 7 pt, the file is skipped: 1-up would read
+   better. `--force` makes it anyway, with a warning, and `--min-size` moves
+   the threshold. A scan has no text to read, so there the old test applies:
+   skipped if the text would end up below 85% of its original size
+   (`--min-scale`).
 5. **Lay out.** Each page is cropped to its box (plus 10pt of breathing room)
    and placed on a landscape sheet at one scale for the whole document.
 
@@ -111,7 +117,8 @@ GitHub workflow runs it before publishing.
 | `--paper` | `letter` | `letter`, `legal`, or `a4` |
 | `--oversize` | `1up` | `1up` gives pages with a much wider text block their own sheet; `2up` shrinks them in with the rest |
 | `-f, --force` | | Make it even if the text would shrink a lot |
-| `--min-scale` | `0.85` | Skip threshold |
+| `--min-size` | `7` | Skip if the smallest text would print below this, pt |
+| `--min-scale` | `0.85` | The same test by shrink, for files with no text to read |
 | `-n, --dry-run` | | Measure and report without writing anything |
 | `--sample` / `--pct` / `--dpi` | `40` / `5` / `50` | Measurement tuning; `--pct 0` never clips any page's content |
 
@@ -131,8 +138,8 @@ Right-click one or more PDFs → **Quick Actions → concur 2-up**.
    Finder** (it won't show in the menu until you do).
 
 Every run ends in a dialog. **Open** opens the result. Files are always made
-(the wrapper passes `--force`), and one whose text comes out under 85% of its
-original size is marked ⚠ rather than skipped. The
+(the wrapper passes `--force`), and one whose smallest print comes out under
+7 pt is marked ⚠ rather than skipped. The
 wrapper expects `concur` at `~/bin/concur` and looks for node in
 `/opt/homebrew/bin` or `/usr/local/bin`; edit `concur-quickaction` if yours
 lives elsewhere.
