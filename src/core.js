@@ -58,6 +58,14 @@ const DATE = new RegExp([
 // A word processor's file name, which a template can print without a date.
 const FILENAME = /\.(docx?|odt|pages|rtf)\s*$/i;
 
+// A publisher's copyright line at the foot of every page ("(c) Blackwell
+// Publishers Ltd 2001").  The (c) often comes out as some other character when
+// the text is extracted ("ss", "fl"), so Blackwell's is matched without it.
+const COPYRIGHT = new RegExp([
+  '^(?:[\\u00a9\\u00df]|\\(c\\)|copyright)\\s*\\S.{0,80}?\\b(?:1[5-9]|20)\\d\\d\\b',
+  "^\\S{0,2}\\s*Blackwell\\b[\\w.&' -]{0,40}?\\b(?:1[5-9]|20)\\d\\d\\b",
+].join('|'), 'i');
+
 // What the page a publisher puts in front of a download says about itself.
 // Matched, like STAMPS, with whitespace removed, and only against page 1.
 const COVERS = [
@@ -213,17 +221,21 @@ async function stampBoxes(doc, sample) {
   // gives it away is not its wording, which varies, but a date that stays the
   // same in the same place on every page: no running head does that, since a
   // running head that never changes carries no date.  A bare file name
-  // ("Beebe - Draft final.docx") gives it away the same way.
+  // ("Beebe - Draft final.docx") gives it away the same way.  So does a
+  // copyright line, which is compared up to its year: the first page often
+  // goes on to give the publisher's address, and the others do not.
   let slug = null;
   const seen = new Map();
   for (const l of upright) {
-    if (!DATE.test(l.shown) && !FILENAME.test(l.shown)) continue;
+    const cr = COPYRIGHT.exec(l.shown);
+    if (!cr && !DATE.test(l.shown) && !FILENAME.test(l.shown)) continue;
     // a line of a download stamp - JSTOR's carries the date it was downloaded
     const inStamp = (out.get(l.n) || []).some(([x0, y0, x1, y1]) => l.box[0] >= x0 - 1
       && l.box[1] >= y0 - 1 && l.box[2] <= x1 + 1 && l.box[3] <= y1 + 1);
     if (inStamp) continue;
-    if (!seen.has(l.key)) seen.set(l.key, []);
-    seen.get(l.key).push(l);
+    const key = cr ? cr[0].replace(/\s+/g, '') : l.key;
+    if (!seen.has(key)) seen.set(key, []);
+    seen.get(key).push(l);
   }
   for (const [key, ls] of seen) {
     const pages = new Set(ls.map((l) => l.n));
